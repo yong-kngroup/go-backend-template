@@ -1,0 +1,2 @@
+@BaseURL= http://localhost:80/api/v1/users
+GET {{BaseURL}}

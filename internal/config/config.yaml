@@ -1,0 +1,6 @@
+app:
+  mode: "development"
+
+server:
+  ip: "localhost"
+  port: 80
