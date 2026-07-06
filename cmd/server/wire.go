@@ -48,7 +48,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 
 func initApp(cfg *config.Config) *App {
 	// —————————— 基础设施初始化（注意顺序）——————————
-	tp, err := tracing.Init(cfg.App.Mode)
+	tp, err := tracing.Init(cfg.App.Mode, cfg.Tracing.Endpoint)
 	if err != nil {
 		panic("failed to init tracing: " + err.Error())
 	}
@@ -81,6 +81,7 @@ func initApp(cfg *config.Config) *App {
 
 	// —————————— 持久层 ——————————
 	db := database.NewPostgresDB(cfg.Database.DSN)
+	database.RunAutoMigrate(db, cfg.App.Mode)
 	txManager := database.NewTxManager(db)
 
 	// —————————— 仓储层 ——————————

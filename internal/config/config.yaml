@@ -20,3 +20,6 @@ email:
   smtp_password: ""
   from_address: "godfree@elseif.site"
   site_base_url: "http://localhost:5173"
+
+tracing:
+  endpoint: "localhost:4318"

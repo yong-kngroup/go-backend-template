@@ -15,6 +15,7 @@ type Config struct {
 	Redis    RedisConfig
 	Email    EmailConfig
 	Captcha  CaptchaConfig
+	Tracing  TracingConfig
 }
 
 type DatabaseConfig struct {
@@ -52,6 +53,10 @@ type CaptchaConfig struct {
 	Width  int
 	Height int
 	Length int
+}
+
+type TracingConfig struct {
+	Endpoint string // Jaeger OTLP HTTP 地址，为空时退回到 stdout
 }
 
 func Load(configPath string) *Config {

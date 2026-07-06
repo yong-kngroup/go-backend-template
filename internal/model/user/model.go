@@ -13,9 +13,9 @@ type User struct {
 	Name          string     `gorm:"type:varchar(100);not null"`
 	Email         string     `gorm:"type:varchar(100);unique;not null"`
 	PasswordHash  string     `gorm:"type:varchar(255);not null"`
-	EmailVerified bool       `gorm:"type:tinyint;default:0"`
+	EmailVerified bool       `gorm:"type:boolean;default:false"`
 	LastLoginAt   *time.Time `gorm:"column:last_login_at"`
-	Status        int        `gorm:"type:tinyint;default:0;not null"`
+	Status        int        `gorm:"type:smallint;default:0;not null"`
 }
 
 func (u *User) ToEntity() *domainUser.User {

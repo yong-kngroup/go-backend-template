@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	modelUser "github.com/freeDog-wy/go-backend-template/internal/model/user"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -26,6 +28,17 @@ func NewPostgresDB(dsn string) *gorm.DB {
 
 func NewTxManager(db *gorm.DB) *TxManager {
 	return &TxManager{db: db}
+}
+
+// RunAutoMigrate 仅在非生产环境执行 GORM AutoMigrate。
+// 生产环境应使用 migration 工具管理表结构。
+func RunAutoMigrate(db *gorm.DB, mode string) {
+	if mode == "production" {
+		return // 生产环境禁止自动建表
+	}
+	if err := db.AutoMigrate(&modelUser.User{}); err != nil {
+		panic("auto migrate failed: " + err.Error())
+	}
 }
 
 type TxManager struct {

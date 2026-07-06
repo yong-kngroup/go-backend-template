@@ -52,7 +52,7 @@ func (b *RedisEventBus) Publish(ctx context.Context, events ...shared.Event) err
 		if err != nil {
 			return err
 		}
-		vals := map[string]interface{}{
+		vals := map[string]any{
 			"event": evt.EventName(),
 			"data":  string(payload),
 		}

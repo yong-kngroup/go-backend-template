@@ -35,6 +35,7 @@ func initWorker(cfg *config.Config) *Worker {
 	}
 
 	db := database.NewPostgresDB(cfg.Database.DSN)
+	database.RunAutoMigrate(db, cfg.App.Mode)
 	userRepo := RepoUser.New(db)
 
 	emailSender := email.New(email.Config{
