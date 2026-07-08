@@ -24,10 +24,11 @@ import (
 	RepoAuthorization "github.com/freeDog-wy/go-backend-template/internal/repository/authorization"
 	RepoIdentity "github.com/freeDog-wy/go-backend-template/internal/repository/identity"
 	RepoVerification "github.com/freeDog-wy/go-backend-template/internal/repository/verification"
-	svcAuth "github.com/freeDog-wy/go-backend-template/internal/service/auth"
-	SvcAuthorization "github.com/freeDog-wy/go-backend-template/internal/service/authorization"
-	SvcIdentity "github.com/freeDog-wy/go-backend-template/internal/service/identity"
-	SvcVerification "github.com/freeDog-wy/go-backend-template/internal/service/verification"
+	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
+	SvcAuthorization "github.com/freeDog-wy/go-backend-template/internal/usecase/authorization"
+	SvcBootstrap "github.com/freeDog-wy/go-backend-template/internal/usecase/bootstrap"
+	SvcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
+	SvcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/captcha"
 
 	"github.com/gin-gonic/gin"
@@ -35,18 +36,15 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-// App 应用顶层结构，包含运行和优雅关闭所需的所有资源。
 type App struct {
 	server *http.Server
 	tp     *sdktrace.TracerProvider
 }
 
-// Run 启动 HTTP 服务。
 func (a *App) Run() error {
 	return a.server.ListenAndServe()
 }
 
-// Shutdown 优雅关闭——先停 HTTP 服务，再 flush 所有未发送的 trace。
 func (a *App) Shutdown(ctx context.Context) error {
 	if err := a.server.Shutdown(ctx); err != nil {
 		return err
@@ -56,7 +54,6 @@ func (a *App) Shutdown(ctx context.Context) error {
 }
 
 func initApp(cfg *config.Config) *App {
-	// —————————— 基础设施初始化（注意顺序）——————————
 	tp, err := tracing.Init(cfg.App.Mode, cfg.Tracing.Endpoint)
 	if err != nil {
 		panic("failed to init tracing: " + err.Error())
@@ -64,32 +61,26 @@ func initApp(cfg *config.Config) *App {
 
 	appLogger := logging.Init(cfg.App.Mode)
 
-	// —————————— 缓存层 ——————————
 	rdb, err := cache.NewRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
 	if err != nil {
 		panic("failed to init redis: " + err.Error())
 	}
-	_ = rdb
 
-	// —————————— 外部服务适配器 ——————————
 	captchaGenerator := captcha.NewWithStore(captcha.Config{
 		Width:  cfg.Captcha.Width,
 		Height: cfg.Captcha.Height,
 		Length: cfg.Captcha.Length,
 	}, captcha.NewRedisStore(rdb, "captcha:", 5*time.Minute))
 
-	// —————————— 持久层 ——————————
 	db := database.NewPostgresDB(cfg.Database.DSN)
 	database.RunAutoMigrate(db, cfg.App.Mode)
 	txManager := database.NewTxManager(db)
 
-	// —————————— 仓储层 ——————————
 	credentialRepo := RepoAuth.New(db)
 	authorizationRepo := RepoAuthorization.New(db)
 	userRepo := RepoIdentity.New(db)
 	verifyRepo := RepoVerification.New(db)
 
-	// —————————— 应用层 ——————————
 	pwdHasher := crypto.NewBcryptHasher(0)
 	eventBus := mq.NewRedisEventBus(rdb, "domain.events", appLogger)
 	sessionStore := cache.NewRefreshSessionStore(rdb)
@@ -97,6 +88,7 @@ func initApp(cfg *config.Config) *App {
 
 	verificationSvc := SvcVerification.New(txManager, userRepo, verifyRepo, credentialRepo, pwdHasher, sessionStore, eventBus, appLogger)
 	authorizationSvc := SvcAuthorization.New(txManager, authorizationRepo, userRepo, eventBus, appLogger)
+	bootstrapSvc := SvcBootstrap.New(txManager, userRepo, authorizationRepo, credentialRepo, pwdHasher, appLogger)
 	identitySvc := SvcIdentity.New(txManager, userRepo, authorizationRepo, credentialRepo, pwdHasher, captchaGenerator, verificationSvc, appLogger, eventBus)
 	authSvc := svcAuth.New(
 		userRepo,
@@ -111,8 +103,15 @@ func initApp(cfg *config.Config) *App {
 		time.Duration(cfg.Auth.AccessTokenTTLMinutes)*time.Minute,
 		time.Duration(cfg.Auth.RefreshTokenTTLHours)*time.Hour,
 	)
+	if err := bootstrapSvc.BootstrapAdmin(context.Background(), SvcBootstrap.BootstrapAdminCmd{
+		Enabled:  cfg.BootstrapAdmin.Enabled,
+		Name:     cfg.BootstrapAdmin.Name,
+		Email:    cfg.BootstrapAdmin.Email,
+		Password: cfg.BootstrapAdmin.Password,
+	}); err != nil {
+		panic("failed to bootstrap admin: " + err.Error())
+	}
 
-	// —————————— 接口层 ——————————
 	captchaHdl := HdlCaptcha.New(captchaGenerator)
 	authHdl := HdlAuth.New(authSvc, authorizationSvc, identitySvc, verificationSvc)
 	adminRoleHdl := HdlAdminRole.New(authSvc, authorizationSvc)
@@ -126,16 +125,12 @@ func initApp(cfg *config.Config) *App {
 	registry.Add(adminUserHdl)
 	registry.Add(meHdl)
 
-	// —————————— Gin 路由 ——————————
 	if cfg.App.Mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	r := gin.New()
-
-	// OTel 中间件——自动为每个请求创建 root span
 	r.Use(otelgin.Middleware("go-backend-template"))
-
 	registry.RegisterAll(r)
 
 	if len(cfg.Server.TrustedProxies) == 0 {

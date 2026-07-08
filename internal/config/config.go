@@ -9,14 +9,16 @@ import (
 )
 
 type Config struct {
-	App      AppConfig
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Auth     AuthConfig
-	Email    EmailConfig
-	Captcha  CaptchaConfig
-	Tracing  TracingConfig
+	App            AppConfig
+	Server         ServerConfig
+	Database       DatabaseConfig
+	Redis          RedisConfig
+	Auth           AuthConfig
+	Email          EmailConfig
+	Captcha        CaptchaConfig
+	Cron           CronConfig
+	Tracing        TracingConfig
+	BootstrapAdmin BootstrapAdminConfig `mapstructure:"bootstrap_admin"`
 }
 
 type AuthConfig struct {
@@ -65,8 +67,20 @@ type CaptchaConfig struct {
 	Length int
 }
 
+type CronConfig struct {
+	Enabled                            bool
+	VerificationCleanupIntervalSeconds int `mapstructure:"verification_cleanup_interval_seconds"`
+}
+
 type TracingConfig struct {
-	Endpoint string // Jaeger OTLP HTTP 地址，为空时退回到 stdout
+	Endpoint string // Jaeger OTLP HTTP 地址，为空时回退到 stdout
+}
+
+type BootstrapAdminConfig struct {
+	Enabled  bool
+	Name     string
+	Email    string
+	Password string
 }
 
 func Load(configPath string) *Config {
@@ -90,6 +104,12 @@ func Load(configPath string) *Config {
 	v.SetDefault("captcha.width", 120)
 	v.SetDefault("captcha.height", 40)
 	v.SetDefault("captcha.length", 6)
+	v.SetDefault("cron.enabled", true)
+	v.SetDefault("cron.verification_cleanup_interval_seconds", 300)
+	v.SetDefault("bootstrap_admin.enabled", false)
+	v.SetDefault("bootstrap_admin.name", "Admin")
+	v.SetDefault("bootstrap_admin.email", "")
+	v.SetDefault("bootstrap_admin.password", "12345678")
 
 	// load config file
 	if configPath == "" {
@@ -114,6 +134,7 @@ func Load(configPath string) *Config {
 	}
 
 	// load Env
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	var cfg Config

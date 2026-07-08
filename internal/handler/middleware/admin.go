@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"github.com/freeDog-wy/go-backend-template/internal/handler"
-	svcAuth "github.com/freeDog-wy/go-backend-template/internal/service/auth"
-	svcAuthorization "github.com/freeDog-wy/go-backend-template/internal/service/authorization"
+	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
+	svcAuthorization "github.com/freeDog-wy/go-backend-template/internal/usecase/authorization"
 
 	"github.com/gin-gonic/gin"
 )

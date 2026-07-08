@@ -1,0 +1,42 @@
+package authorization
+
+const SuperAdminRoleCode = "super_admin"
+
+type permissionDefinition struct {
+	code        string
+	name        string
+	description string
+}
+
+var defaultPermissionDefinitions = []permissionDefinition{
+	{code: "user.read", name: "Read Users", description: "View user list and details"},
+	{code: "user.write", name: "Write Users", description: "Manage user profile and roles"},
+	{code: "user.ban", name: "Ban Users", description: "Change user status"},
+	{code: "role.read", name: "Read Roles", description: "View role definitions"},
+	{code: "role.write", name: "Write Roles", description: "Create and update roles"},
+	{code: "permission.read", name: "Read Permissions", description: "View permission definitions"},
+}
+
+func NewSuperAdminRole() (*Role, error) {
+	return NewRole(SuperAdminRoleCode, "Super Admin", "System bootstrap administrator")
+}
+
+func DefaultPermissions() []*Permission {
+	permissions := make([]*Permission, 0, len(defaultPermissionDefinitions))
+	for _, definition := range defaultPermissionDefinitions {
+		permission, _ := NewPermission(definition.code, definition.name, definition.description)
+		permissions = append(permissions, permission)
+	}
+	return permissions
+}
+
+func PermissionCodes(permissions []*Permission) []string {
+	codes := make([]string, 0, len(permissions))
+	for _, permission := range permissions {
+		if permission == nil {
+			continue
+		}
+		codes = append(codes, permission.GetCode())
+	}
+	return codes
+}

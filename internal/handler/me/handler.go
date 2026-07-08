@@ -5,8 +5,8 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/handler"
 	handlerMiddleware "github.com/freeDog-wy/go-backend-template/internal/handler/middleware"
-	svcAuth "github.com/freeDog-wy/go-backend-template/internal/service/auth"
-	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/service/identity"
+	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
+	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
 
 	"github.com/gin-gonic/gin"
 )

@@ -10,16 +10,16 @@ import (
 	domainAuthorization "github.com/freeDog-wy/go-backend-template/internal/domain/authorization"
 	domainIdentity "github.com/freeDog-wy/go-backend-template/internal/domain/identity"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
+	usecaseSupport "github.com/freeDog-wy/go-backend-template/internal/usecase/support"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 )
-
-const superAdminRoleCode = "super_admin"
 
 type Service struct {
 	tx       shared.TxManager
 	repo     domainAuthorization.Repository
 	userRepo domainIdentity.Repository
 	roleBind domainAuthorization.RoleBindingService
+	defaults *usecaseSupport.AuthorizationDefaultsInstaller
 	eventBus shared.EventBus
 	logger   logger.Logger
 }
@@ -36,27 +36,16 @@ func New(
 		repo:     repo,
 		userRepo: userRepo,
 		roleBind: *domainAuthorization.NewRoleBindingService(),
+		defaults: usecaseSupport.NewAuthorizationDefaultsInstaller(repo),
 		eventBus: eventBus,
 		logger:   logger,
 	}
 }
 
 func (s *Service) EnsureAdminAccess(ctx context.Context, userID uint) error {
-	if err := s.ensureDefaults(ctx); err != nil {
+	if err := s.EnsureDefaults(ctx); err != nil {
 		return err
 	}
-
-	count, err := s.repo.CountUserRoleBindings(ctx)
-	if err != nil {
-		return err
-	}
-
-	if count == 0 {
-		if err := s.bootstrapSuperAdmin(ctx, userID); err != nil {
-			return err
-		}
-	}
-
 	codes, err := s.repo.ListUserPermissionCodes(ctx, userID)
 	if err != nil {
 		return err
@@ -68,7 +57,7 @@ func (s *Service) EnsureAdminAccess(ctx context.Context, userID uint) error {
 }
 
 func (s *Service) HasPermission(ctx context.Context, userID uint, code string) (bool, error) {
-	if err := s.ensureDefaults(ctx); err != nil {
+	if err := s.EnsureDefaults(ctx); err != nil {
 		return false, err
 	}
 	codes, err := s.repo.ListUserPermissionCodes(ctx, userID)
@@ -79,7 +68,7 @@ func (s *Service) HasPermission(ctx context.Context, userID uint, code string) (
 }
 
 func (s *Service) ListRoles(ctx context.Context, cmd ListRolesCmd) ([]*RoleResult, shared.PageResult, error) {
-	if err := s.ensureDefaults(ctx); err != nil {
+	if err := s.EnsureDefaults(ctx); err != nil {
 		return nil, shared.PageResult{}, err
 	}
 
@@ -111,7 +100,7 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCmd) (*RoleResul
 
 	var result *RoleResult
 	err = s.tx.Do(ctx, func(ctx context.Context) error {
-		if err := s.ensureDefaults(ctx); err != nil {
+		if err := s.EnsureDefaults(ctx); err != nil {
 			return err
 		}
 		if err := s.repo.CreateRole(ctx, role); err != nil {
@@ -140,7 +129,7 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCmd) (*RoleResul
 func (s *Service) UpdateRole(ctx context.Context, cmd UpdateRoleCmd) (*RoleResult, error) {
 	var result *RoleResult
 	err := s.tx.Do(ctx, func(ctx context.Context) error {
-		if err := s.ensureDefaults(ctx); err != nil {
+		if err := s.EnsureDefaults(ctx); err != nil {
 			return err
 		}
 		role, err := s.repo.FindRoleByID(ctx, cmd.RoleID)
@@ -179,7 +168,7 @@ func (s *Service) UpdateRole(ctx context.Context, cmd UpdateRoleCmd) (*RoleResul
 }
 
 func (s *Service) ListPermissions(ctx context.Context, cmd ListPermissionsCmd) ([]*PermissionResult, shared.PageResult, error) {
-	if err := s.ensureDefaults(ctx); err != nil {
+	if err := s.EnsureDefaults(ctx); err != nil {
 		return nil, shared.PageResult{}, err
 	}
 	permissions, total, err := s.repo.ListPermissions(ctx, cmd.Page)
@@ -203,7 +192,7 @@ func (s *Service) ListPermissions(ctx context.Context, cmd ListPermissionsCmd) (
 }
 
 func (s *Service) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCmd) error {
-	if err := s.ensureDefaults(ctx); err != nil {
+	if err := s.EnsureDefaults(ctx); err != nil {
 		return err
 	}
 	if _, err := s.userRepo.FindByID(ctx, cmd.UserID); err != nil {
@@ -235,7 +224,7 @@ func (s *Service) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCmd)
 }
 
 func (s *Service) ListUserRoles(ctx context.Context, userID uint) ([]*RoleResult, error) {
-	if err := s.ensureDefaults(ctx); err != nil {
+	if err := s.EnsureDefaults(ctx); err != nil {
 		return nil, err
 	}
 	roles, err := s.repo.ListUserRoles(ctx, userID)
@@ -253,79 +242,8 @@ func (s *Service) ListUserRoles(ctx context.Context, userID uint) ([]*RoleResult
 	return results, nil
 }
 
-func (s *Service) ensureDefaults(ctx context.Context) error {
-	permissions := defaultPermissions()
-	if err := s.repo.EnsurePermissions(ctx, permissions); err != nil {
-		return err
-	}
-
-	superAdmin, err := domainAuthorization.NewRole(superAdminRoleCode, "Super Admin", "System bootstrap administrator")
-	if err != nil {
-		return err
-	}
-	role, err := s.repo.EnsureRole(ctx, superAdmin)
-	if err != nil {
-		return err
-	}
-
-	permissionIDs := make([]uint, 0, len(permissions))
-	savedPermissions, err := s.repo.FindPermissionsByCodes(ctx, permissionCodes(permissions))
-	if err != nil {
-		return err
-	}
-	for _, permission := range savedPermissions {
-		permissionIDs = append(permissionIDs, permission.GetID())
-	}
-	return s.repo.ReplaceRolePermissions(ctx, role.GetID(), permissionIDs)
-}
-
-func (s *Service) bootstrapSuperAdmin(ctx context.Context, userID uint) error {
-	roles, _, err := s.repo.ListRoles(ctx, shared.NewPageQuery(1, shared.MaxPerPage))
-	if err != nil {
-		return err
-	}
-	for _, role := range roles {
-		if role.GetCode() == superAdminRoleCode {
-			if err := s.repo.ReplaceUserRoles(ctx, userID, []uint{role.GetID()}); err != nil {
-				return err
-			}
-			if s.logger != nil {
-				s.logger.Info("bootstrap super admin granted", "user_id", userID)
-			}
-			return nil
-		}
-	}
-	return domainAuthorization.ErrRoleNotFound
-}
-
-func defaultPermissions() []*domainAuthorization.Permission {
-	definitions := []struct {
-		code        string
-		name        string
-		description string
-	}{
-		{code: "user.read", name: "Read Users", description: "View user list and details"},
-		{code: "user.write", name: "Write Users", description: "Manage user profile and roles"},
-		{code: "user.ban", name: "Ban Users", description: "Change user status"},
-		{code: "role.read", name: "Read Roles", description: "View role definitions"},
-		{code: "role.write", name: "Write Roles", description: "Create and update roles"},
-		{code: "permission.read", name: "Read Permissions", description: "View permission definitions"},
-	}
-
-	permissions := make([]*domainAuthorization.Permission, 0, len(definitions))
-	for _, definition := range definitions {
-		permission, _ := domainAuthorization.NewPermission(definition.code, definition.name, definition.description)
-		permissions = append(permissions, permission)
-	}
-	return permissions
-}
-
-func permissionCodes(permissions []*domainAuthorization.Permission) []string {
-	codes := make([]string, 0, len(permissions))
-	for _, permission := range permissions {
-		codes = append(codes, permission.GetCode())
-	}
-	return codes
+func (s *Service) EnsureDefaults(ctx context.Context) error {
+	return s.defaults.Ensure(ctx)
 }
 
 func (s *Service) validateRoleIDs(ctx context.Context, roleIDs []uint) ([]uint, error) {

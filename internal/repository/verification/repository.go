@@ -67,6 +67,13 @@ func (r *Repository) Update(ctx context.Context, token *domainVerification.Email
 		}).Error
 }
 
+func (r *Repository) DeleteExpiredEmailVerificationTokens(ctx context.Context, now time.Time) (int64, error) {
+	result := database.DB(ctx, r.db).
+		Where("expires_at <= ?", now).
+		Delete(&modelVerification.EmailVerificationToken{})
+	return result.RowsAffected, result.Error
+}
+
 func (r *Repository) CreatePasswordReset(ctx context.Context, token *domainVerification.PasswordResetToken) error {
 	m := modelVerification.PasswordResetTokenFromEntity(token)
 	return r.passwordResetG(ctx).Create(ctx, m)
@@ -100,4 +107,11 @@ func (r *Repository) UpdatePasswordReset(ctx context.Context, token *domainVerif
 		Updates(map[string]any{
 			"consumed_at": m.ConsumedAt,
 		}).Error
+}
+
+func (r *Repository) DeleteExpiredPasswordResetTokens(ctx context.Context, now time.Time) (int64, error) {
+	result := database.DB(ctx, r.db).
+		Where("expires_at <= ?", now).
+		Delete(&modelVerification.PasswordResetToken{})
+	return result.RowsAffected, result.Error
 }

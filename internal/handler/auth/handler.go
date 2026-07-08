@@ -4,10 +4,10 @@ import (
 	"errors"
 
 	"github.com/freeDog-wy/go-backend-template/internal/handler"
-	svcAuth "github.com/freeDog-wy/go-backend-template/internal/service/auth"
-	svcAuthorization "github.com/freeDog-wy/go-backend-template/internal/service/authorization"
-	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/service/identity"
-	svcVerification "github.com/freeDog-wy/go-backend-template/internal/service/verification"
+	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
+	svcAuthorization "github.com/freeDog-wy/go-backend-template/internal/usecase/authorization"
+	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
+	svcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 
 	"github.com/gin-gonic/gin"
 )

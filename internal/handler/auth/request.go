@@ -1,9 +1,9 @@
 package auth
 
 import (
-	svcAuth "github.com/freeDog-wy/go-backend-template/internal/service/auth"
-	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/service/identity"
-	svcVerification "github.com/freeDog-wy/go-backend-template/internal/service/verification"
+	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
+	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
+	svcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 )
 
 // RegisterReq 注册请求 DTO。

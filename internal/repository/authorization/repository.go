@@ -90,6 +90,17 @@ func (r *Repository) FindRoleByID(ctx context.Context, roleID uint) (*domainAuth
 	return model.ToEntity(), nil
 }
 
+func (r *Repository) FindRoleByCode(ctx context.Context, code string) (*domainAuthorization.Role, error) {
+	var model modelAuthorization.Role
+	if err := database.DB(ctx, r.db).Where("code = ?", code).First(&model).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, shared.ErrNotFound
+		}
+		return nil, err
+	}
+	return model.ToEntity(), nil
+}
+
 func (r *Repository) FindRolesByIDs(ctx context.Context, roleIDs []uint) ([]*domainAuthorization.Role, error) {
 	if len(roleIDs) == 0 {
 		return []*domainAuthorization.Role{}, nil
@@ -252,8 +263,12 @@ func (r *Repository) ReplaceUserRoles(ctx context.Context, userID uint, roleIDs 
 	return db.Create(&records).Error
 }
 
-func (r *Repository) CountUserRoleBindings(ctx context.Context) (int64, error) {
+func (r *Repository) CountUsersByRoleCode(ctx context.Context, roleCode string) (int64, error) {
 	var count int64
-	err := database.DB(ctx, r.db).Model(&modelAuthorization.UserRole{}).Count(&count).Error
+	err := database.DB(ctx, r.db).
+		Table("user_roles").
+		Joins("JOIN roles ON roles.id = user_roles.role_id").
+		Where("roles.code = ?", roleCode).
+		Count(&count).Error
 	return count, err
 }

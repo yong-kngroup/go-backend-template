@@ -31,3 +31,13 @@ email:
 
 tracing:
   endpoint: "localhost:4318"
+
+cron:
+  enabled: true
+  verification_cleanup_interval_seconds: 300
+
+bootstrap_admin:
+  enabled: false
+  name: "Admin"
+  email: ""
+  password: ""

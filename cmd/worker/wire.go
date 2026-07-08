@@ -13,8 +13,8 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
 	RepoAudit "github.com/freeDog-wy/go-backend-template/internal/repository/audit"
-	SvcAudit "github.com/freeDog-wy/go-backend-template/internal/service/audit"
-	SvcVerification "github.com/freeDog-wy/go-backend-template/internal/service/verification"
+	SvcAudit "github.com/freeDog-wy/go-backend-template/internal/usecase/audit"
+	SvcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/email"
 )
 

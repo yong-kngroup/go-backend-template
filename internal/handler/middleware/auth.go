@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/freeDog-wy/go-backend-template/internal/handler"
-	svcAuth "github.com/freeDog-wy/go-backend-template/internal/service/auth"
+	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
 
 	"github.com/gin-gonic/gin"
 )

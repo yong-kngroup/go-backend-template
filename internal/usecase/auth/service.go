@@ -15,7 +15,7 @@ import (
 	domainAuth "github.com/freeDog-wy/go-backend-template/internal/domain/auth"
 	domainIdentity "github.com/freeDog-wy/go-backend-template/internal/domain/identity"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
-	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/service/identity"
+	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 )
 

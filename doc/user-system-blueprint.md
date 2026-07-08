@@ -16,25 +16,29 @@
 当前代码已经具备一套可继续演进的基础骨架：
 
 - HTTP 入口在 `cmd/server`
-- Worker 入口在 `cmd/worker`
-- Handler / Service / Domain / Repository / Infra 已分层
-- 注册流程已包含验证码校验、数据库写入、事件发布、异步邮件发送
+- 事件消费入口在 `cmd/worker`
+- 已确认将新增 `cmd/cron` 作为单实例定时任务入口
+- Handler / Usecase / Domain / Repository / Infra 已分层
+- 注册、邮箱验证、登录、刷新、登出、找回密码、后台用户管理与 RBAC 已有基础实现
 
 关键证据：
 
 - 服务装配：`cmd/server/wire.go`
 - Worker 装配：`cmd/worker/wire.go`
-- 用户注册编排：`internal/service/user/service.go`
-- 用户实体与领域事件：`internal/domain/user/entity.go`
-- 用户仓储：`internal/repository/user/repository.go`
+- 用户注册编排：`internal/usecase/identity/service.go`
+- 认证编排：`internal/usecase/auth/service.go`
+- 权限编排：`internal/usecase/authorization/service.go`
+- 启动期管理员初始化：`internal/usecase/bootstrap/service.go`
+- 共享授权默认模型安装：`internal/usecase/support/authorization_defaults.go`
 - Redis Streams 事件总线：`internal/infra/mq/event_bus.go`
 
 当前已确认问题：
 
-- 用户注册后返回的 `ID` 与事件中的 `UserID` 不可靠
-- 事件发布与数据库事务未实现强一致
-- 邮箱验证仍是占位实现
-- 认证、权限、后台管理尚未建立正式模块边界
+- 事件发布与数据库事务未实现强一致，`outbox` 尚未落地
+- 事件消费失败仍然会 `ack`
+- Access Token 撤销策略尚未完整实现，请求链路未校验 session 有效性
+- 登录失败锁定、权限缓存、登录限流仍未落地
+- 文档中历史 `service/user`、`domain/user` 路径描述已过时
 
 ## 3. 本次蓝图的固定约束
 
@@ -51,10 +55,11 @@
 ### 4.1 分层原则
 
 - `handler` 仅负责协议转换、参数校验、响应映射
-- `service` 仅负责用例编排与事务边界
+- `usecase` 仅负责用例编排与事务边界
 - `domain` 负责实体、值对象、领域规则、领域事件、仓储契约
 - `repository` 负责持久化实现，不承载业务规则
 - `infra` 负责数据库、缓存、消息、日志、邮件、加密、追踪等基础设施适配
+- `cmd/*` 负责进程入口与依赖装配，不承载业务规则
 
 ### 4.2 安全原则
 
@@ -70,6 +75,17 @@
 - 用户本体、认证、验证、授权四类能力分包演进
 - 异步副作用默认经事件流转，不在请求链路直接串外部副作用
 
+### 4.4 `cmd/cron` 职责边界
+
+- `cmd/cron` 是单实例部署的定时任务进程，用于执行“非请求驱动、非消息驱动”的后台任务
+- `cmd/cron` 负责装配依赖、注册任务、配置调度周期与启动调度器，不承载具体业务规则
+- 具体任务逻辑应放在对应模块的 `usecase/<module>/cron.go` 中，按业务归属组织，而不是按触发方式集中堆放
+- `cmd/cron` 与 `cmd/worker` 的边界应明确：
+  - `cmd/worker` 负责消费已投递的异步事件
+  - `cmd/cron` 负责扫描、补偿、清理、归档、发布等定时任务
+- 调度器实现可以依赖外部库，并在 `pkg/scheduler` 下做轻量抽象；`usecase` 层不直接依赖具体调度库
+- 当前阶段按单实例假设设计，但任务本身仍必须满足幂等性要求
+
 ## 5. 目标目录结构
 
 建议按以下方式重构用户系统相关目录：
@@ -78,6 +94,7 @@
 cmd/
   server/
   worker/
+  cron/
 
 internal/
   domain/
@@ -86,11 +103,13 @@ internal/
     verification/
     authorization/
     shared/
-  service/
+  usecase/
     identity/
     auth/
     verification/
     authorization/
+    bootstrap/
+    support/
   handler/
     auth/
     me/
@@ -120,6 +139,7 @@ pkg/
   captcha/
   email/
   logger/
+  scheduler/
 ```
 
 ## 6. 子系统边界
@@ -626,11 +646,11 @@ pkg/
 
 ```text
 HTTP Handler
--> Service
+-> Usecase
 -> DB Transaction
 -> 写业务表
 -> 写 outbox_events
--> Publisher Job
+-> Publisher Job（cmd/cron，单实例）
 -> Redis Streams
 -> Worker Consumer
 -> 邮件发送 / 审计 / 其他副作用
@@ -661,6 +681,20 @@ HTTP Handler
 - 统一分页响应
 - 登录限流器
 
+### 15.1 `cmd/cron` 首批适用任务
+
+建议优先将以下能力设计为 `cmd/cron` 驱动：
+
+- Outbox 发布与补偿任务
+- 过期 token / 临时数据清理任务
+- 审计数据归档与保留策略任务
+
+这些任务都应遵循以下约束：
+
+- 任务逻辑按业务归属放在对应 `usecase/<module>/cron.go`
+- 调度注册统一放在 `cmd/cron/wire.go`
+- 任务默认要求幂等，可安全重复执行
+
 ## 16. 分阶段实施计划
 
 ### Phase 1：重构基础边界
@@ -672,10 +706,10 @@ HTTP Handler
 
 主要改动点：
 
-- `internal/domain/user`
-- `internal/service/user`
-- `internal/repository/user`
-- `internal/model/user`
+- `internal/domain/identity`
+- `internal/usecase/identity`
+- `internal/repository/identity`
+- `internal/model/identity`
 - `cmd/server/wire.go`
 - `cmd/worker/wire.go`
 
@@ -755,23 +789,29 @@ HTTP Handler
 ### 18.1 可以保留的部分
 
 - `cmd/server` / `cmd/worker` 双入口
-- `handler -> service -> domain -> repository -> infra` 的总体分层
+- 新增 `cmd/cron` 作为单实例定时任务入口的思路
+- `handler -> usecase -> domain -> repository -> infra` 的总体分层
 - `pkg/captcha`
 - `pkg/email`
 - `pkg/logger`
+- `pkg/scheduler` 这一类对外部调度器的轻量抽象
 
 ### 18.2 应优先重构的部分
 
-- 现有 `internal/domain/user` 模块过于宽泛，应拆分
-- 现有注册返回值与事件载荷不完整
-- 现有邮箱验证逻辑仍为占位
-- 现有消息发布缺少 outbox
+- `outbox_events` 模型、仓储、发布任务尚未落地
+- 现有消息发布仍为“业务写库 + 直接发 Redis Streams”
+- 现有事件消费仍为“失败也 ack”
+- Access Token 撤销校验尚未纳入请求链路
+- 登录失败锁定、权限缓存、登录限流尚未落地
+- 文档与代码当前目录命名已从 `service` 演进为 `usecase`
 
 ### 18.3 不建议的演进方式
 
-- 不建议继续把登录、权限、后台管理堆到 `internal/service/user`
+- 不建议重新引入宽泛的 `user` 大模块承载登录、权限、后台管理
+- 不建议让 `usecase` 之间直接相互依赖
 - 不建议把完整权限集直接编码进 JWT
 - 不建议继续保持“失败也 ack”的事件消费策略
+- 不建议把定时任务调度细节放入 `usecase` 层
 
 ## 19. 待确认项
 

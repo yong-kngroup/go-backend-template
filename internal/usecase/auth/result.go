@@ -1,6 +1,6 @@
 package auth
 
-import svcIdentity "github.com/freeDog-wy/go-backend-template/internal/service/identity"
+import svcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
 
 type AuthResult struct {
 	AccessToken  string
