@@ -37,7 +37,6 @@ type DatabaseConfig struct {
 }
 
 type MQConfig struct {
-	Provider   string
 	EventsName string      `mapstructure:"events_name"`
 	Kafka      KafkaConfig `mapstructure:"kafka"`
 }
@@ -58,21 +57,19 @@ type AppConfig struct {
 }
 
 type WorkerConfig struct {
-	ConsumerGroup                 string `mapstructure:"consumer_group"`
-	ConsumerName                  string `mapstructure:"consumer_name"`
-	ConsumerReadCount             int    `mapstructure:"consumer_read_count"`
-	ConsumerReadBlockSeconds      int    `mapstructure:"consumer_read_block_seconds"`
-	ConsumerPendingMinIdleSeconds int    `mapstructure:"consumer_pending_min_idle_seconds"`
-	ConsumerReclaimBatch          int    `mapstructure:"consumer_reclaim_batch"`
-	ConsumerMaxRetries            int    `mapstructure:"consumer_max_retries"`
-	ConsumerIdempotencyTTLHours   int    `mapstructure:"consumer_idempotency_ttl_hours"`
-	ConsumerProcessingLockSeconds int    `mapstructure:"consumer_processing_lock_seconds"`
-	KafkaReadMinBytes             int    `mapstructure:"kafka_read_min_bytes"`
-	KafkaReadMaxBytes             int    `mapstructure:"kafka_read_max_bytes"`
-	KafkaMaxWaitSeconds           int    `mapstructure:"kafka_max_wait_seconds"`
-	KafkaRetryTopic               string `mapstructure:"kafka_retry_topic"`
-	KafkaDeadLetterTopic          string `mapstructure:"kafka_dead_letter_topic"`
-	DeadLetterStream              string `mapstructure:"dead_letter_stream"`
+	ConsumerGroup                 string                  `mapstructure:"consumer_group"`
+	ConsumerMaxRetries            int                     `mapstructure:"consumer_max_retries"`
+	ConsumerProcessingLockSeconds int                     `mapstructure:"consumer_processing_lock_seconds"`
+	KafkaReadMinBytes             int                     `mapstructure:"kafka_read_min_bytes"`
+	KafkaReadMaxBytes             int                     `mapstructure:"kafka_read_max_bytes"`
+	KafkaMaxWaitSeconds           int                     `mapstructure:"kafka_max_wait_seconds"`
+	KafkaRetryTopics              []KafkaRetryTopicConfig `mapstructure:"kafka_retry_topics"`
+	KafkaDeadLetterTopic          string                  `mapstructure:"kafka_dead_letter_topic"`
+}
+
+type KafkaRetryTopicConfig struct {
+	Topic        string `mapstructure:"topic"`
+	DelaySeconds int    `mapstructure:"delay_seconds"`
 }
 
 type ServerConfig struct {
@@ -100,9 +97,18 @@ type CaptchaConfig struct {
 
 type CronConfig struct {
 	Enabled                            bool
-	OutboxPublishIntervalSeconds       int `mapstructure:"outbox_publish_interval_seconds"`
-	OutboxBatchSize                    int `mapstructure:"outbox_batch_size"`
-	VerificationCleanupIntervalSeconds int `mapstructure:"verification_cleanup_interval_seconds"`
+	OutboxPublishIntervalSeconds       int    `mapstructure:"outbox_publish_interval_seconds"`
+	OutboxBatchSize                    int    `mapstructure:"outbox_batch_size"`
+	VerificationCleanupIntervalSeconds int    `mapstructure:"verification_cleanup_interval_seconds"`
+	DLQInspectionEnabled               bool   `mapstructure:"dlq_inspection_enabled"`
+	DLQInspectionIntervalSeconds       int    `mapstructure:"dlq_inspection_interval_seconds"`
+	DLQInspectionBatchSize             int    `mapstructure:"dlq_inspection_batch_size"`
+	DLQInspectionGroup                 string `mapstructure:"dlq_inspection_group"`
+	DLQReplayEnabled                   bool   `mapstructure:"dlq_replay_enabled"`
+	DLQReplayIntervalSeconds           int    `mapstructure:"dlq_replay_interval_seconds"`
+	DLQReplayBatchSize                 int    `mapstructure:"dlq_replay_batch_size"`
+	DLQReplayGroup                     string `mapstructure:"dlq_replay_group"`
+	DLQReplayTarget                    string `mapstructure:"dlq_replay_target"`
 }
 
 type TracingConfig struct {
@@ -127,7 +133,6 @@ func Load(configPath string) *Config {
 	v.SetDefault("server.writeTimeout", 30)
 	v.SetDefault("email.smtpPort", 465)
 	v.SetDefault("email.siteBaseURL", "http://localhost:5173")
-	v.SetDefault("mq.provider", "redis")
 	v.SetDefault("mq.events_name", "domain.events")
 	v.SetDefault("mq.kafka.brokers", []string{"localhost:9092"})
 	v.SetDefault("mq.kafka.client_id", "go-backend-template")
@@ -138,20 +143,17 @@ func Load(configPath string) *Config {
 	v.SetDefault("auth.refreshTokenTTLHours", 24*7)
 	v.SetDefault("auth.loginFailThreshold", 5)
 	v.SetDefault("worker.consumer_group", "user-worker")
-	v.SetDefault("worker.consumer_name", "worker-1")
-	v.SetDefault("worker.consumer_read_count", 10)
-	v.SetDefault("worker.consumer_read_block_seconds", 1)
-	v.SetDefault("worker.consumer_pending_min_idle_seconds", 30)
-	v.SetDefault("worker.consumer_reclaim_batch", 10)
 	v.SetDefault("worker.consumer_max_retries", 10)
-	v.SetDefault("worker.consumer_idempotency_ttl_hours", 24*7)
 	v.SetDefault("worker.consumer_processing_lock_seconds", 300)
 	v.SetDefault("worker.kafka_read_min_bytes", 1024)
 	v.SetDefault("worker.kafka_read_max_bytes", 10*1024*1024)
 	v.SetDefault("worker.kafka_max_wait_seconds", 1)
-	v.SetDefault("worker.kafka_retry_topic", "domain.events.retry")
+	v.SetDefault("worker.kafka_retry_topics", []map[string]any{
+		{"topic": "domain.events.retry.30s", "delay_seconds": 30},
+		{"topic": "domain.events.retry.5m", "delay_seconds": 300},
+		{"topic": "domain.events.retry.30m", "delay_seconds": 1800},
+	})
 	v.SetDefault("worker.kafka_dead_letter_topic", "domain.events.dlq")
-	v.SetDefault("worker.dead_letter_stream", "domain.events.dlq")
 
 	v.SetDefault("captcha.width", 120)
 	v.SetDefault("captcha.height", 40)
@@ -160,6 +162,13 @@ func Load(configPath string) *Config {
 	v.SetDefault("cron.outbox_publish_interval_seconds", 5)
 	v.SetDefault("cron.outbox_batch_size", 100)
 	v.SetDefault("cron.verification_cleanup_interval_seconds", 300)
+	v.SetDefault("cron.dlq_inspection_enabled", true)
+	v.SetDefault("cron.dlq_inspection_interval_seconds", 60)
+	v.SetDefault("cron.dlq_inspection_batch_size", 50)
+	v.SetDefault("cron.dlq_replay_enabled", false)
+	v.SetDefault("cron.dlq_replay_interval_seconds", 300)
+	v.SetDefault("cron.dlq_replay_batch_size", 20)
+	v.SetDefault("cron.dlq_replay_target", "main")
 	v.SetDefault("bootstrap_admin.enabled", false)
 	v.SetDefault("bootstrap_admin.name", "Admin")
 	v.SetDefault("bootstrap_admin.email", "")
@@ -194,6 +203,13 @@ func Load(configPath string) *Config {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		panic(fmt.Errorf("failed to unmarshal config: %v", err))
+	}
+
+	if strings.TrimSpace(cfg.Cron.DLQInspectionGroup) == "" {
+		cfg.Cron.DLQInspectionGroup = strings.TrimSpace(cfg.Worker.ConsumerGroup) + "-dlq-inspector"
+	}
+	if strings.TrimSpace(cfg.Cron.DLQReplayGroup) == "" {
+		cfg.Cron.DLQReplayGroup = strings.TrimSpace(cfg.Worker.ConsumerGroup) + "-dlq-replay"
 	}
 
 	return &cfg

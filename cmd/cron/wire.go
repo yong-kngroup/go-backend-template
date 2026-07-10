@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/cache"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
 	RepoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	RepoVerification "github.com/freeDog-wy/go-backend-template/internal/repository/verification"
+	UsecaseMessaging "github.com/freeDog-wy/go-backend-template/internal/usecase/messaging"
 	UsecaseSupport "github.com/freeDog-wy/go-backend-template/internal/usecase/support"
 	UsecaseVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
@@ -51,7 +51,7 @@ func initCronApp(cfg *config.Config) *CronApp {
 		db := database.NewPostgresDB(cfg.Database.DSN)
 
 		outboxRepo := RepoOutbox.New(db)
-		publisher := initOutboxMQPublisher(cfg, appLogger)
+		publisher := mq.NewPublisherFromConfig(cfg, appLogger)
 		outboxPublisher := UsecaseSupport.NewOutboxPublisher(
 			outboxRepo,
 			mq.NewOutboxPublisherAdapter(publisher),
@@ -76,6 +76,8 @@ func initCronApp(cfg *config.Config) *CronApp {
 		}); err != nil {
 			panic("failed to register verification cleanup job: " + err.Error())
 		}
+
+		registerKafkaDLQJobs(cfg, appLogger, runner)
 	}
 
 	return &CronApp{
@@ -85,17 +87,62 @@ func initCronApp(cfg *config.Config) *CronApp {
 	}
 }
 
-func initOutboxMQPublisher(cfg *config.Config, appLogger logger.Logger) mq.Publisher {
-	switch strings.ToLower(strings.TrimSpace(cfg.MQ.Provider)) {
-	case "", "redis":
-		rdb, err := cache.NewRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
-		if err != nil {
-			panic("failed to init redis: " + err.Error())
+func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *scheduler.Runner) {
+	if cfg.Cron.DLQInspectionEnabled {
+		if cfg.Cron.DLQInspectionIntervalSeconds <= 0 {
+			panic("cron.dlq_inspection_interval_seconds must be greater than zero")
 		}
-		return mq.NewRedisPublisher(rdb, cfg.MQ.EventsName, appLogger)
-	case "kafka":
-		return mq.NewKafkaPublisher(cfg.MQ.Kafka.Brokers, cfg.MQ.EventsName, cfg.MQ.Kafka.ClientID, appLogger)
-	default:
-		panic("unsupported mq provider: " + cfg.MQ.Provider)
+		if cfg.Cron.DLQInspectionBatchSize <= 0 {
+			panic("cron.dlq_inspection_batch_size must be greater than zero")
+		}
+		if strings.TrimSpace(cfg.Cron.DLQInspectionGroup) == "" {
+			panic("cron.dlq_inspection_group must not be empty")
+		}
+
+		inspector := mq.NewDeadLetterInspectorFromConfig(cfg, cfg.Cron.DLQInspectionGroup, appLogger)
+		service := UsecaseMessaging.NewDeadLetterUsecase(
+			inspector,
+			nil,
+			appLogger,
+			cfg.Cron.DLQInspectionBatchSize,
+			0,
+			"",
+		)
+		if err := runner.Register(scheduler.Job{
+			Name:     "mq.dlq.inspect",
+			Interval: time.Duration(cfg.Cron.DLQInspectionIntervalSeconds) * time.Second,
+			Run:      service.InspectDeadLetters,
+		}); err != nil {
+			panic("failed to register dlq inspection job: " + err.Error())
+		}
+	}
+
+	if cfg.Cron.DLQReplayEnabled {
+		if cfg.Cron.DLQReplayIntervalSeconds <= 0 {
+			panic("cron.dlq_replay_interval_seconds must be greater than zero")
+		}
+		if cfg.Cron.DLQReplayBatchSize <= 0 {
+			panic("cron.dlq_replay_batch_size must be greater than zero")
+		}
+		if strings.TrimSpace(cfg.Cron.DLQReplayGroup) == "" {
+			panic("cron.dlq_replay_group must not be empty")
+		}
+
+		replayer := mq.NewDeadLetterReplayerFromConfig(cfg, cfg.Cron.DLQReplayGroup, appLogger)
+		service := UsecaseMessaging.NewDeadLetterUsecase(
+			nil,
+			replayer,
+			appLogger,
+			0,
+			cfg.Cron.DLQReplayBatchSize,
+			mq.ResolveDeadLetterReplayTargetFromConfig(cfg),
+		)
+		if err := runner.Register(scheduler.Job{
+			Name:     "mq.dlq.replay",
+			Interval: time.Duration(cfg.Cron.DLQReplayIntervalSeconds) * time.Second,
+			Run:      service.ReplayDeadLetters,
+		}); err != nil {
+			panic("failed to register dlq replay job: " + err.Error())
+		}
 	}
 }

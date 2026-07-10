@@ -9,7 +9,6 @@ database:
   dsn: "host=localhost user=postgres password=postgres dbname=go_backend port=5432 sslmode=disable TimeZone=Asia/Shanghai"
 
 mq:
-  provider: "redis"
   events_name: "domain.events"
   kafka:
     brokers:
@@ -23,20 +22,19 @@ redis:
 
 worker:
   consumer_group: "user-worker"
-  consumer_name: "worker-1"
-  consumer_read_count: 10
-  consumer_read_block_seconds: 1
-  consumer_pending_min_idle_seconds: 30
-  consumer_reclaim_batch: 10
   consumer_max_retries: 10
-  consumer_idempotency_ttl_hours: 168
   consumer_processing_lock_seconds: 300
   kafka_read_min_bytes: 1024
   kafka_read_max_bytes: 10485760
   kafka_max_wait_seconds: 1
-  kafka_retry_topic: "domain.events.retry"
+  kafka_retry_topics:
+    - topic: "domain.events.retry.30s"
+      delay_seconds: 30
+    - topic: "domain.events.retry.5m"
+      delay_seconds: 300
+    - topic: "domain.events.retry.30m"
+      delay_seconds: 1800
   kafka_dead_letter_topic: "domain.events.dlq"
-  dead_letter_stream: "domain.events.dlq"
 
 auth:
   jwt_issuer: "go-backend-template"
@@ -62,6 +60,15 @@ cron:
   outbox_publish_interval_seconds: 5
   outbox_batch_size: 100
   verification_cleanup_interval_seconds: 300
+  dlq_inspection_enabled: true
+  dlq_inspection_interval_seconds: 60
+  dlq_inspection_batch_size: 50
+  dlq_inspection_group: "user-worker-dlq-inspector"
+  dlq_replay_enabled: false
+  dlq_replay_interval_seconds: 300
+  dlq_replay_batch_size: 20
+  dlq_replay_group: "user-worker-dlq-replay"
+  dlq_replay_target: "main"
 
 bootstrap_admin:
   enabled: false

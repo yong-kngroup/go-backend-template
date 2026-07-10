@@ -1,12 +1,12 @@
-package mq
+package kafka
 
 import (
 	"strings"
 
-	"github.com/segmentio/kafka-go"
+	kgo "github.com/segmentio/kafka-go"
 )
 
-func normalizeKafkaBrokers(brokers []string) []string {
+func NormalizeBrokers(brokers []string) []string {
 	normalizedBrokers := make([]string, 0, len(brokers))
 	for _, broker := range brokers {
 		if trimmed := strings.TrimSpace(broker); trimmed != "" {
@@ -16,8 +16,8 @@ func normalizeKafkaBrokers(brokers []string) []string {
 	return normalizedBrokers
 }
 
-func newKafkaWriter(brokers []string, topic, clientID string) *kafka.Writer {
-	normalizedBrokers := normalizeKafkaBrokers(brokers)
+func NewWriter(brokers []string, topic string, cfg WriterConfig) *kgo.Writer {
+	normalizedBrokers := NormalizeBrokers(brokers)
 	if len(normalizedBrokers) == 0 {
 		panic("kafka brokers must not be empty")
 	}
@@ -25,14 +25,14 @@ func newKafkaWriter(brokers []string, topic, clientID string) *kafka.Writer {
 		panic("kafka topic must not be empty")
 	}
 
-	return &kafka.Writer{
-		Addr:         kafka.TCP(normalizedBrokers...),
+	return &kgo.Writer{
+		Addr:         kgo.TCP(normalizedBrokers...),
 		Topic:        topic,
-		Balancer:     &kafka.Hash{},
-		RequiredAcks: kafka.RequireAll,
+		Balancer:     &kgo.Hash{},
+		RequiredAcks: kgo.RequireAll,
 		Async:        false,
-		Transport: &kafka.Transport{
-			ClientID: strings.TrimSpace(clientID),
+		Transport: &kgo.Transport{
+			ClientID: strings.TrimSpace(cfg.ClientID),
 		},
 	}
 }

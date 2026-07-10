@@ -30,7 +30,7 @@
 - 权限编排：`internal/usecase/authorization/service.go`
 - 启动期管理员初始化：`internal/usecase/bootstrap/service.go`
 - 共享授权默认模型安装：`internal/usecase/support/authorization_defaults.go`
-- Redis Streams 事件总线：`internal/infra/mq/event_bus.go`
+- Kafka 事件适配层：`internal/infra/mq`
 
 当前已确认问题：
 
@@ -651,14 +651,14 @@ HTTP Handler
 -> 写业务表
 -> 写 outbox_events
 -> Publisher Job（cmd/cron，单实例）
--> Redis Streams
+-> Kafka
 -> Worker Consumer
 -> 邮件发送 / 审计 / 其他副作用
 ```
 
 ### 14.3 为什么要引入 Outbox
 
-当前实现是“业务写库 + 直接发 Redis Streams”。
+当前实现是“业务写库 + 定时发布到 Kafka”。
 
 问题在于：
 
@@ -799,7 +799,7 @@ HTTP Handler
 ### 18.2 应优先重构的部分
 
 - `outbox_events` 模型、仓储、发布任务尚未落地
-- 现有消息发布仍为“业务写库 + 直接发 Redis Streams”
+- 现有消息发布已调整为“业务写库 + outbox + 定时发布到 Kafka”
 - 现有事件消费仍为“失败也 ack”
 - Access Token 撤销校验尚未纳入请求链路
 - 登录失败锁定、权限缓存、登录限流尚未落地
