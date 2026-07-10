@@ -9,6 +9,7 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
 	RepoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	RepoVerification "github.com/freeDog-wy/go-backend-template/internal/repository/verification"
 	UsecaseMessaging "github.com/freeDog-wy/go-backend-template/internal/usecase/messaging"
@@ -16,12 +17,14 @@ import (
 	UsecaseVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"github.com/freeDog-wy/go-backend-template/pkg/scheduler"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type CronApp struct {
 	enabled bool
 	logger  logger.Logger
 	runner  *scheduler.Runner
+	tp      *sdktrace.TracerProvider
 }
 
 func (a *CronApp) Run(ctx context.Context) error {
@@ -34,7 +37,16 @@ func (a *CronApp) Run(ctx context.Context) error {
 	return a.runner.Run(ctx)
 }
 
+func (a *CronApp) Shutdown(ctx context.Context) {
+	tracing.Shutdown(ctx, a.tp)
+}
+
 func initCronApp(cfg *config.Config) *CronApp {
+	tp, err := tracing.Init(cfg.App.Mode, cfg.Tracing.Endpoint, "go-backend-template-cron")
+	if err != nil {
+		panic("failed to init tracing: " + err.Error())
+	}
+
 	appLogger := logging.Init(cfg.App.Mode)
 	runner := scheduler.New(appLogger)
 	if cfg.Cron.Enabled {
@@ -84,6 +96,7 @@ func initCronApp(cfg *config.Config) *CronApp {
 		enabled: cfg.Cron.Enabled,
 		logger:  appLogger,
 		runner:  runner,
+		tp:      tp,
 	}
 }
 

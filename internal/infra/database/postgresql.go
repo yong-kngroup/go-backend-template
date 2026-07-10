@@ -21,6 +21,9 @@ func NewPostgresDB(dsn string) *gorm.DB {
 	if err != nil {
 		panic("failed to connect database: " + err.Error())
 	}
+	if err := db.Use(newTracingPlugin()); err != nil {
+		panic("failed to init gorm tracing: " + err.Error())
+	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		panic("failed to get database instance: " + err.Error())

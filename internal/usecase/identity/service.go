@@ -14,7 +14,12 @@ import (
 	domainVerification "github.com/freeDog-wy/go-backend-template/internal/domain/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/captcha"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var identityTracer = otel.Tracer("github.com/freeDog-wy/go-backend-template/internal/usecase/identity")
 
 // EmailVerificationIssuer 为 identity 注册流程提供邮箱验证签发能力。
 type EmailVerificationIssuer interface {
@@ -61,7 +66,21 @@ func New(
 
 // Register 用户注册——编排验证码校验、邮箱唯一检查、密码哈希、
 // 实体创建、事务持久化、领域事件发布。
-func (s *Service) Register(ctx context.Context, cmd RegisterCmd) (*UserResult, error) {
+func (s *Service) Register(ctx context.Context, cmd RegisterCmd) (result *UserResult, err error) {
+	ctx, span := identityTracer.Start(ctx, "identity.register")
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+			if result != nil {
+				span.SetAttributes(attribute.Int64("app.user.id", int64(result.ID)))
+			}
+		}
+		span.End()
+	}()
+
 	if !s.captcha.Verify(cmd.CaptchaID, cmd.CaptchaCode) {
 		return nil, ErrInvalidCaptcha
 	}
@@ -82,7 +101,6 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCmd) (*UserResult, e
 		return nil, err
 	}
 
-	var result *UserResult
 	err = s.tx.Do(ctx, func(ctx context.Context) error {
 		if err := s.userRepo.Create(ctx, user); err != nil {
 			return err

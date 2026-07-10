@@ -11,24 +11,34 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
 	RepoAudit "github.com/freeDog-wy/go-backend-template/internal/repository/audit"
 	RepoConsumption "github.com/freeDog-wy/go-backend-template/internal/repository/consumption"
 	SvcAudit "github.com/freeDog-wy/go-backend-template/internal/usecase/audit"
 	SvcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/email"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-// Worker 事件消费者进程。
 type Worker struct {
 	consumer mq.Consumer
+	tp       *sdktrace.TracerProvider
 }
 
-// Run 启动消费者，阻塞直到 ctx 取消。
 func (w *Worker) Run(ctx context.Context) error {
 	return w.consumer.Run(ctx)
 }
 
+func (w *Worker) Shutdown(ctx context.Context) {
+	tracing.Shutdown(ctx, w.tp)
+}
+
 func initWorker(cfg *config.Config) *Worker {
+	tp, err := tracing.Init(cfg.App.Mode, cfg.Tracing.Endpoint, "go-backend-template-worker")
+	if err != nil {
+		panic("failed to init tracing: " + err.Error())
+	}
+
 	appLogger := logging.Init(cfg.App.Mode)
 	db := database.NewPostgresDB(cfg.Database.DSN)
 
@@ -77,5 +87,8 @@ func initWorker(cfg *config.Config) *Worker {
 		return auditConsumer.OnLogRequested(ctx, evt)
 	})
 
-	return &Worker{consumer: consumer}
+	return &Worker{
+		consumer: consumer,
+		tp:       tp,
+	}
 }

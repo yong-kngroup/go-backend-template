@@ -1,6 +1,4 @@
-// Package cache 提供 Redis 连接初始化。
-// 业务接口由各使用方自行定义（captcha.Store / session.Store 等），
-// 本包只负责创建 *redis.Client 并配置连接池。
+// Package cache creates Redis clients used by infrastructure adapters.
 package cache
 
 import (
@@ -10,7 +8,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// NewRedis 创建 Redis 客户端，自动检测连接是否可达。
 func NewRedis(addr, password string, db int) (*redis.Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         addr,
@@ -23,8 +20,8 @@ func NewRedis(addr, password string, db int) (*redis.Client, error) {
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
 	})
+	rdb.AddHook(newTracingHook(addr, db))
 
-	// 启动时做一次 ping，确保连接可达
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {

@@ -6,7 +6,12 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var deadLetterTracer = otel.Tracer("github.com/freeDog-wy/go-backend-template/internal/usecase/messaging")
 
 type DeadLetterUsecase struct {
 	inspector           mq.DeadLetterInspector
@@ -80,7 +85,23 @@ func (u *DeadLetterUsecase) InspectDeadLetters(ctx context.Context) error {
 }
 
 // ReplayDeadLetters 从 DLQ 拉取一批消息并回放到指定目标 topic。
-func (u *DeadLetterUsecase) ReplayDeadLetters(ctx context.Context) error {
+func (u *DeadLetterUsecase) ReplayDeadLetters(ctx context.Context) (err error) {
+	ctx, span := deadLetterTracer.Start(ctx, "messaging.dead_letter.replay")
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+		span.End()
+	}()
+
+	span.SetAttributes(
+		attribute.Int("dead_letter.batch_size", u.replayBatchSize),
+		attribute.String("dead_letter.target_topic", u.replayTargetTopic),
+	)
+
 	if u.replayer == nil {
 		return nil
 	}
@@ -92,6 +113,11 @@ func (u *DeadLetterUsecase) ReplayDeadLetters(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	span.SetAttributes(
+		attribute.Int("dead_letter.fetched", result.Fetched),
+		attribute.Int("dead_letter.replayed", result.Replayed),
+		attribute.Int("dead_letter.skipped", result.Skipped),
+	)
 	if u.logger != nil && (result.Fetched > 0 || result.Replayed > 0 || result.Skipped > 0) {
 		u.logger.Info(
 			"dead letter replay completed",

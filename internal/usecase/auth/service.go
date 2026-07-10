@@ -17,7 +17,12 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	svcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var authTracer = otel.Tracer("github.com/freeDog-wy/go-backend-template/internal/usecase/auth")
 
 type Service struct {
 	userRepo        domainIdentity.Repository
@@ -61,7 +66,21 @@ func New(
 	}
 }
 
-func (s *Service) Login(ctx context.Context, cmd LoginCmd) (*AuthResult, error) {
+func (s *Service) Login(ctx context.Context, cmd LoginCmd) (result *AuthResult, err error) {
+	ctx, span := authTracer.Start(ctx, "auth.login")
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+			if result != nil && result.User != nil {
+				span.SetAttributes(attribute.Int64("app.user.id", int64(result.User.ID)))
+			}
+		}
+		span.End()
+	}()
+
 	email := strings.ToLower(strings.TrimSpace(cmd.Email))
 	user, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
@@ -125,7 +144,7 @@ func (s *Service) Login(ctx context.Context, cmd LoginCmd) (*AuthResult, error) 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, err
 	}
-	result, err := s.issueTokens(ctx, user, now)
+	result, err = s.issueTokens(ctx, user, now)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +159,21 @@ func (s *Service) Login(ctx context.Context, cmd LoginCmd) (*AuthResult, error) 
 	return result, nil
 }
 
-func (s *Service) Refresh(ctx context.Context, cmd RefreshCmd) (*AuthResult, error) {
+func (s *Service) Refresh(ctx context.Context, cmd RefreshCmd) (result *AuthResult, err error) {
+	ctx, span := authTracer.Start(ctx, "auth.refresh")
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+			if result != nil && result.User != nil {
+				span.SetAttributes(attribute.Int64("app.user.id", int64(result.User.ID)))
+			}
+		}
+		span.End()
+	}()
+
 	sessionID, secret, err := parseRefreshToken(cmd.RefreshToken)
 	if err != nil {
 		return nil, ErrInvalidRefreshToken
@@ -173,7 +206,8 @@ func (s *Service) Refresh(ctx context.Context, cmd RefreshCmd) (*AuthResult, err
 	}
 
 	_ = s.sessionStore.DeleteByID(ctx, sessionID)
-	return s.issueTokens(ctx, user, now)
+	result, err = s.issueTokens(ctx, user, now)
+	return result, err
 }
 
 func (s *Service) Logout(ctx context.Context, cmd LogoutCmd) error {
@@ -270,7 +304,21 @@ func (s *Service) ParseAccessToken(token string) (*AccessIdentity, error) {
 }
 
 // AuthenticateAccessToken validates the JWT and confirms the backing session is still active.
-func (s *Service) AuthenticateAccessToken(ctx context.Context, token string) (*AccessIdentity, error) {
+func (s *Service) AuthenticateAccessToken(ctx context.Context, token string) (identity *AccessIdentity, err error) {
+	ctx, span := authTracer.Start(ctx, "auth.authenticate_access_token")
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+			if identity != nil {
+				span.SetAttributes(attribute.Int64("app.user.id", int64(identity.UserID)))
+			}
+		}
+		span.End()
+	}()
+
 	claims, err := s.tokenManager.ParseAccessToken(token, time.Now())
 	if err != nil {
 		return nil, ErrInvalidAccessToken
@@ -294,10 +342,11 @@ func (s *Service) AuthenticateAccessToken(ctx context.Context, token string) (*A
 		return nil, ErrInvalidAccessToken
 	}
 
-	return &AccessIdentity{
+	identity = &AccessIdentity{
 		UserID:    claims.UserID,
 		SessionID: claims.SessionID,
-	}, nil
+	}
+	return identity, nil
 }
 
 func (s *Service) issueTokens(ctx context.Context, user *domainIdentity.User, now time.Time) (*AuthResult, error) {

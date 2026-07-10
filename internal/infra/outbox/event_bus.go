@@ -6,11 +6,12 @@ import (
 
 	domainOutbox "github.com/freeDog-wy/go-backend-template/internal/domain/outbox"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
-
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// EventBus 是 shared.EventBus 的持久化实现：发布时先写本地 outbox，而不是直接打 MQ。
+// EventBus persists domain events into the local outbox table.
 type EventBus struct {
 	repo domainOutbox.Repository
 }
@@ -21,13 +22,13 @@ func NewEventBus(repo domainOutbox.Repository) *EventBus {
 
 var _ shared.EventBus = (*EventBus)(nil)
 
-// Publish 在业务事务里把领域事件序列化后写入 outbox 表。
 func (b *EventBus) Publish(ctx context.Context, events ...shared.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
 
 	traceID := extractTraceID(ctx)
+	traceContext := extractTraceContext(ctx)
 	outboxEvents := make([]*domainOutbox.Event, 0, len(events))
 	for _, event := range events {
 		payload, err := json.Marshal(event)
@@ -35,7 +36,7 @@ func (b *EventBus) Publish(ctx context.Context, events ...shared.Event) error {
 			return err
 		}
 
-		outboxEvent, err := domainOutbox.NewEvent(event.EventName(), string(payload), traceID)
+		outboxEvent, err := domainOutbox.NewEvent(event.EventName(), string(payload), traceID, traceContext)
 		if err != nil {
 			return err
 		}
@@ -45,11 +46,24 @@ func (b *EventBus) Publish(ctx context.Context, events ...shared.Event) error {
 	return b.repo.Create(ctx, outboxEvents...)
 }
 
-// extractTraceID 保留链路追踪信息，后续真正投递时继续透传给 worker。
 func extractTraceID(ctx context.Context) string {
 	span := trace.SpanFromContext(ctx)
 	if span.SpanContext().IsValid() {
 		return span.SpanContext().TraceID().String()
 	}
 	return ""
+}
+
+func extractTraceContext(ctx context.Context) string {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	if len(carrier) == 0 {
+		return ""
+	}
+
+	payload, err := json.Marshal(map[string]string(carrier))
+	if err != nil {
+		return ""
+	}
+	return string(payload)
 }

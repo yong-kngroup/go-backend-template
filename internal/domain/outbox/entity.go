@@ -5,44 +5,44 @@ import (
 	"time"
 )
 
-// Event 表示落在本地 outbox 表中的待发布事件记录。
+// Event is a domain event persisted in the local outbox table until it is published.
 type Event struct {
-	id          uint
-	eventName   string
-	payload     string
-	traceID     string
-	publishedAt *time.Time
-	createdAt   time.Time
+	id           uint
+	eventName    string
+	payload      string
+	traceID      string
+	traceContext string
+	publishedAt  *time.Time
+	createdAt    time.Time
 }
 
-// NewEvent 在事务内创建一条待发布事件，真正投递由后续 publisher 完成。
-func NewEvent(eventName, payload, traceID string) (*Event, error) {
+func NewEvent(eventName, payload, traceID, traceContext string) (*Event, error) {
 	eventName = strings.TrimSpace(eventName)
 	if eventName == "" || strings.TrimSpace(payload) == "" {
 		return nil, ErrInvalidEvent
 	}
 
 	return &Event{
-		eventName: eventName,
-		payload:   payload,
-		traceID:   strings.TrimSpace(traceID),
-		createdAt: time.Now(),
+		eventName:    eventName,
+		payload:      payload,
+		traceID:      strings.TrimSpace(traceID),
+		traceContext: strings.TrimSpace(traceContext),
+		createdAt:    time.Now(),
 	}, nil
 }
 
-// ReconstituteEvent 用于从持久化记录恢复领域对象。
-func ReconstituteEvent(id uint, eventName, payload, traceID string, publishedAt *time.Time, createdAt time.Time) *Event {
+func ReconstituteEvent(id uint, eventName, payload, traceID, traceContext string, publishedAt *time.Time, createdAt time.Time) *Event {
 	return &Event{
-		id:          id,
-		eventName:   eventName,
-		payload:     payload,
-		traceID:     traceID,
-		publishedAt: publishedAt,
-		createdAt:   createdAt,
+		id:           id,
+		eventName:    eventName,
+		payload:      payload,
+		traceID:      traceID,
+		traceContext: traceContext,
+		publishedAt:  publishedAt,
+		createdAt:    createdAt,
 	}
 }
 
-// MarkPublished 标记该记录已经成功投递到外部消息系统。
 func (e *Event) MarkPublished(now time.Time) {
 	e.publishedAt = &now
 }
@@ -61,6 +61,10 @@ func (e *Event) GetPayload() string {
 
 func (e *Event) GetTraceID() string {
 	return e.traceID
+}
+
+func (e *Event) GetTraceContext() string {
+	return e.traceContext
 }
 
 func (e *Event) GetPublishedAt() *time.Time {

@@ -10,6 +10,9 @@ import (
 	domainConsumption "github.com/freeDog-wy/go-backend-template/internal/domain/consumption"
 	pkgkafka "github.com/freeDog-wy/go-backend-template/pkg/kafka"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type consumerAdapterConfig struct {
@@ -95,7 +98,7 @@ func (c *consumerAdapter) Run(ctx context.Context) error {
 	return c.topology.Run(ctx, c.handleLoopMessage)
 }
 
-func (c *consumerAdapter) handleLoopMessage(ctx context.Context, loop pkgkafka.ReaderLoop, record pkgkafka.Record) error {
+func (c *consumerAdapter) handleLoopMessage(ctx context.Context, loop pkgkafka.ReaderLoop, record pkgkafka.Record) (err error) {
 	eventMessage, err := c.decodeMessage(record)
 	if err != nil {
 		if routeErr := c.routeMalformedToDeadLetter(ctx, record, err); routeErr != nil {
@@ -112,8 +115,36 @@ func (c *consumerAdapter) handleLoopMessage(ctx context.Context, loop pkgkafka.R
 		return err
 	}
 
+	handlerCtx := ExtractTraceContext(ctx, record.Headers)
+	if eventMessage.TraceID == "" {
+		eventMessage.TraceID = TraceIDFromContext(handlerCtx)
+	}
+
+	handlerCtx, span := mqTracer.Start(handlerCtx, "mq.consume",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "kafka"),
+			attribute.String("messaging.destination.name", record.Topic),
+			attribute.String("messaging.operation", "consume"),
+			attribute.String("app.event.name", eventMessage.Event),
+			attribute.String("messaging.message.id", eventMessage.Key),
+			attribute.Int("messaging.kafka.partition", record.Partition),
+			attribute.Int64("messaging.kafka.offset", record.Offset),
+			attribute.String("messaging.consumer.group.name", c.groupID),
+		),
+	)
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+		span.End()
+	}()
+
 	beginAt := time.Now()
-	beginResult, err := c.beginConsumption(ctx, eventMessage, beginAt)
+	beginResult, err := c.beginConsumption(handlerCtx, eventMessage, beginAt)
 	if err != nil {
 		c.logger.Error("begin kafka consumption failed", "event", eventMessage.Event, "message_key", eventMessage.Key, "error", err)
 		return err
@@ -121,7 +152,7 @@ func (c *consumerAdapter) handleLoopMessage(ctx context.Context, loop pkgkafka.R
 
 	switch beginResult.Decision {
 	case domainConsumption.BeginDecisionDone:
-		if err := loop.CommitMessages(ctx, record); err != nil {
+		if err := loop.CommitMessages(handlerCtx, record); err != nil {
 			c.logger.Error("commit already processed kafka message failed", "event", eventMessage.Event, "message_key", eventMessage.Key, "offset", record.Offset, "error", err)
 			return err
 		}
@@ -132,27 +163,22 @@ func (c *consumerAdapter) handleLoopMessage(ctx context.Context, loop pkgkafka.R
 		return lockErr
 	}
 
-	handlerCtx := ctx
-	if eventMessage.TraceID != "" {
-		handlerCtx = context.WithValue(ctx, ctxKey{}, eventMessage.TraceID)
-	}
-
 	handler, ok := c.handlers[eventMessage.Event]
 	if !ok {
 		handlerErr := MarkNonRetryable(errors.New("no handler for event: " + eventMessage.Event))
-		return c.handleFailure(ctx, loop, record, eventMessage, beginResult.AttemptCount, handlerErr)
+		return c.handleFailure(handlerCtx, loop, record, eventMessage, beginResult.AttemptCount, handlerErr)
 	}
 
 	if err := handler(handlerCtx, eventMessage); err != nil {
-		return c.handleFailure(ctx, loop, record, eventMessage, beginResult.AttemptCount, err)
+		return c.handleFailure(handlerCtx, loop, record, eventMessage, beginResult.AttemptCount, err)
 	}
 
-	if err := c.markDone(ctx, eventMessage.Key, time.Now()); err != nil {
+	if err := c.markDone(handlerCtx, eventMessage.Key, time.Now()); err != nil {
 		c.logger.Error("mark kafka message done state error", "event", eventMessage.Event, "message_key", eventMessage.Key, "error", err)
 		return err
 	}
 
-	if err := loop.CommitMessages(ctx, record); err != nil {
+	if err := loop.CommitMessages(handlerCtx, record); err != nil {
 		c.logger.Error("commit kafka message failed", "event", eventMessage.Event, "topic", record.Topic, "partition", record.Partition, "offset", record.Offset, "error", err)
 		return err
 	}
@@ -172,10 +198,11 @@ func (c *consumerAdapter) decodeMessage(record pkgkafka.Record) (Message, error)
 	}
 
 	return Message{
-		Key:     messageKey,
-		Event:   eventName,
-		Payload: record.Value,
-		TraceID: pkgkafka.HeaderValue(record.Headers, "trace_id"),
+		Key:          messageKey,
+		Event:        eventName,
+		Payload:      record.Value,
+		TraceID:      TraceIDFromHeaders(record.Headers),
+		TraceContext: SerializeHeadersTraceContext(record.Headers),
 	}, nil
 }
 
@@ -252,18 +279,22 @@ func (c *consumerAdapter) retryRoute(attemptCount int) pkgkafka.RetryPublisher {
 }
 
 func (c *consumerAdapter) routeMalformedToDeadLetter(ctx context.Context, record pkgkafka.Record, decodeErr error) error {
+	routeCtx := ExtractTraceContext(ctx, record.Headers)
+	headers := pkgkafka.AppendHeaders(
+		record.Headers,
+		pkgkafka.Header{Key: "reason", Value: []byte(strings.TrimSpace(decodeErr.Error()))},
+		pkgkafka.Header{Key: "failed_at", Value: []byte(time.Now().UTC().Format(time.RFC3339))},
+		pkgkafka.Header{Key: "consumer_group", Value: []byte(c.groupID)},
+		pkgkafka.Header{Key: "source_topic", Value: []byte(record.Topic)},
+		pkgkafka.Header{Key: "source_partition", Value: []byte(strconv.Itoa(record.Partition))},
+		pkgkafka.Header{Key: "source_offset", Value: []byte(strconv.FormatInt(record.Offset, 10))},
+	)
+	headers = InjectTraceContext(routeCtx, headers)
+
 	err := c.topology.DeadLetterPublisher.Publish(ctx, pkgkafka.Message{
-		Key:   record.Key,
-		Value: record.Value,
-		Headers: pkgkafka.AppendHeaders(
-			record.Headers,
-			pkgkafka.Header{Key: "reason", Value: []byte(strings.TrimSpace(decodeErr.Error()))},
-			pkgkafka.Header{Key: "failed_at", Value: []byte(time.Now().UTC().Format(time.RFC3339))},
-			pkgkafka.Header{Key: "consumer_group", Value: []byte(c.groupID)},
-			pkgkafka.Header{Key: "source_topic", Value: []byte(record.Topic)},
-			pkgkafka.Header{Key: "source_partition", Value: []byte(strconv.Itoa(record.Partition))},
-			pkgkafka.Header{Key: "source_offset", Value: []byte(strconv.FormatInt(record.Offset, 10))},
-		),
+		Key:     record.Key,
+		Value:   record.Value,
+		Headers: headers,
 	})
 	if err != nil {
 		c.logger.Error("write malformed kafka dead letter failed", "topic", record.Topic, "offset", record.Offset, "error", err)
@@ -274,21 +305,29 @@ func (c *consumerAdapter) routeMalformedToDeadLetter(ctx context.Context, record
 }
 
 func (c *consumerAdapter) publishRetry(ctx context.Context, route pkgkafka.RetryPublisher, record pkgkafka.Record, message Message, attemptCount int, handlerErr error) error {
+	traceID := strings.TrimSpace(message.TraceID)
+	if traceID == "" {
+		traceID = TraceIDFromContext(ctx)
+	}
+
+	headers := []pkgkafka.Header{
+		{Key: "event", Value: []byte(message.Event)},
+		{Key: traceIDHeader, Value: []byte(traceID)},
+		{Key: "retry_count", Value: []byte(strconv.Itoa(attemptCount))},
+		{Key: "retry_topic", Value: []byte(route.Topic)},
+		{Key: "retry_delay_seconds", Value: []byte(strconv.Itoa(int(route.Delay.Seconds())))},
+		{Key: "original_topic", Value: []byte(originalTopic(record))},
+		{Key: "source_topic", Value: []byte(record.Topic)},
+		{Key: "source_partition", Value: []byte(strconv.Itoa(record.Partition))},
+		{Key: "source_offset", Value: []byte(strconv.FormatInt(record.Offset, 10))},
+		{Key: "last_error", Value: []byte(strings.TrimSpace(handlerErr.Error()))},
+	}
+	headers = InjectTraceContext(ctx, headers)
+
 	retryMessage := pkgkafka.Message{
-		Key:   []byte(message.Key),
-		Value: message.Payload,
-		Headers: []pkgkafka.Header{
-			{Key: "event", Value: []byte(message.Event)},
-			{Key: "trace_id", Value: []byte(message.TraceID)},
-			{Key: "retry_count", Value: []byte(strconv.Itoa(attemptCount))},
-			{Key: "retry_topic", Value: []byte(route.Topic)},
-			{Key: "retry_delay_seconds", Value: []byte(strconv.Itoa(int(route.Delay.Seconds())))},
-			{Key: "original_topic", Value: []byte(originalTopic(record))},
-			{Key: "source_topic", Value: []byte(record.Topic)},
-			{Key: "source_partition", Value: []byte(strconv.Itoa(record.Partition))},
-			{Key: "source_offset", Value: []byte(strconv.FormatInt(record.Offset, 10))},
-			{Key: "last_error", Value: []byte(strings.TrimSpace(handlerErr.Error()))},
-		},
+		Key:     []byte(message.Key),
+		Value:   message.Payload,
+		Headers: headers,
 	}
 	if err := route.Publisher.Publish(ctx, retryMessage); err != nil {
 		c.logger.Error("write layered kafka retry message failed", "event", message.Event, "message_key", message.Key, "retry_topic", route.Topic, "error", err)
@@ -298,23 +337,31 @@ func (c *consumerAdapter) publishRetry(ctx context.Context, route pkgkafka.Retry
 }
 
 func (c *consumerAdapter) publishDeadLetter(ctx context.Context, record pkgkafka.Record, message Message, attemptCount int, handlerErr error) error {
+	traceID := strings.TrimSpace(message.TraceID)
+	if traceID == "" {
+		traceID = TraceIDFromContext(ctx)
+	}
+
+	headers := []pkgkafka.Header{
+		{Key: "event", Value: []byte(message.Event)},
+		{Key: traceIDHeader, Value: []byte(traceID)},
+		{Key: "retry_count", Value: []byte(strconv.Itoa(attemptCount))},
+		{Key: "retry_topic", Value: []byte(strings.TrimSpace(pkgkafka.HeaderValue(record.Headers, "retry_topic")))},
+		{Key: "retry_delay_seconds", Value: []byte(strings.TrimSpace(pkgkafka.HeaderValue(record.Headers, "retry_delay_seconds")))},
+		{Key: "original_topic", Value: []byte(originalTopic(record))},
+		{Key: "source_topic", Value: []byte(record.Topic)},
+		{Key: "source_partition", Value: []byte(strconv.Itoa(record.Partition))},
+		{Key: "source_offset", Value: []byte(strconv.FormatInt(record.Offset, 10))},
+		{Key: "reason", Value: []byte(strings.TrimSpace(handlerErr.Error()))},
+		{Key: "failed_at", Value: []byte(time.Now().UTC().Format(time.RFC3339))},
+		{Key: "consumer_group", Value: []byte(c.groupID)},
+	}
+	headers = InjectTraceContext(ctx, headers)
+
 	deadLetterMessage := pkgkafka.Message{
-		Key:   []byte(message.Key),
-		Value: message.Payload,
-		Headers: []pkgkafka.Header{
-			{Key: "event", Value: []byte(message.Event)},
-			{Key: "trace_id", Value: []byte(message.TraceID)},
-			{Key: "retry_count", Value: []byte(strconv.Itoa(attemptCount))},
-			{Key: "retry_topic", Value: []byte(strings.TrimSpace(pkgkafka.HeaderValue(record.Headers, "retry_topic")))},
-			{Key: "retry_delay_seconds", Value: []byte(strings.TrimSpace(pkgkafka.HeaderValue(record.Headers, "retry_delay_seconds")))},
-			{Key: "original_topic", Value: []byte(originalTopic(record))},
-			{Key: "source_topic", Value: []byte(record.Topic)},
-			{Key: "source_partition", Value: []byte(strconv.Itoa(record.Partition))},
-			{Key: "source_offset", Value: []byte(strconv.FormatInt(record.Offset, 10))},
-			{Key: "reason", Value: []byte(strings.TrimSpace(handlerErr.Error()))},
-			{Key: "failed_at", Value: []byte(time.Now().UTC().Format(time.RFC3339))},
-			{Key: "consumer_group", Value: []byte(c.groupID)},
-		},
+		Key:     []byte(message.Key),
+		Value:   message.Payload,
+		Headers: headers,
 	}
 	if err := c.topology.DeadLetterPublisher.Publish(ctx, deadLetterMessage); err != nil {
 		c.logger.Error("write kafka dead letter message failed", "event", message.Event, "message_key", message.Key, "error", err)

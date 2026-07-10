@@ -6,7 +6,7 @@ import (
 	domainOutbox "github.com/freeDog-wy/go-backend-template/internal/domain/outbox"
 )
 
-// OutboxPublisherAdapter 把 outbox 的领域发布契约适配到 mq.Publisher。
+// OutboxPublisherAdapter maps the outbox publisher contract onto mq.Publisher.
 type OutboxPublisherAdapter struct {
 	publisher Publisher
 }
@@ -17,11 +17,12 @@ func NewOutboxPublisherAdapter(publisher Publisher) *OutboxPublisherAdapter {
 
 var _ domainOutbox.Publisher = (*OutboxPublisherAdapter)(nil)
 
-func (a *OutboxPublisherAdapter) Publish(ctx context.Context, messageKey, eventName string, payload []byte, traceID string) error {
+func (a *OutboxPublisherAdapter) Publish(ctx context.Context, messageKey, eventName string, payload []byte, traceID, traceContext string) error {
 	return a.publisher.Publish(ctx, Message{
-		Key:     messageKey,
-		Event:   eventName,
-		Payload: payload,
-		TraceID: traceID,
+		Key:          messageKey,
+		Event:        eventName,
+		Payload:      payload,
+		TraceID:      traceID,
+		TraceContext: traceContext,
 	})
 }

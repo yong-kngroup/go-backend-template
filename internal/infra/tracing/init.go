@@ -1,4 +1,4 @@
-// Package tracing 负责 OpenTelemetry 链路追踪的初始化。
+// Package tracing initializes OpenTelemetry tracing.
 package tracing
 
 import (
@@ -10,19 +10,28 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 )
 
-// Init 初始化 OpenTelemetry TracerProvider。
-//
-//	若 endpoint 非空 → 通过 OTLP HTTP 发送到 Jaeger。
-//	若 endpoint 为空 → 退回到 stdout（开发便利模式）。
-//
-// 返回的 TracerProvider 已注册为全局。调用方需在程序退出前执行 Shutdown。
-func Init(mode, endpoint string) (*sdktrace.TracerProvider, error) {
+// Init creates and registers a global TracerProvider.
+// If endpoint is empty, spans are exported to stdout for local development.
+func Init(mode, endpoint, serviceName string) (*sdktrace.TracerProvider, error) {
 	exporter, err := createExporter(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("create exporter: %w", err)
+	}
+
+	res, err := resource.New(context.Background(),
+		resource.WithFromEnv(),
+		resource.WithTelemetrySDK(),
+		resource.WithProcess(),
+		resource.WithHost(),
+		resource.WithAttributes(semconv.ServiceName(serviceName)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create resource: %w", err)
 	}
 
 	sampler := sdktrace.AlwaysSample()
@@ -31,6 +40,7 @@ func Init(mode, endpoint string) (*sdktrace.TracerProvider, error) {
 	}
 
 	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sampler),
 		sdktrace.WithBatcher(exporter),
 	)
@@ -56,7 +66,6 @@ func createExporter(endpoint string) (sdktrace.SpanExporter, error) {
 		return exporter, nil
 	}
 
-	// 退化到 stdout（本地开发没起 Jaeger 也能用）
 	exporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
 	if err != nil {
 		return nil, fmt.Errorf("create stdout exporter: %w", err)
@@ -64,7 +73,7 @@ func createExporter(endpoint string) (sdktrace.SpanExporter, error) {
 	return exporter, nil
 }
 
-// Shutdown 优雅关闭 TracerProvider，flush 所有未发送的 span。
+// Shutdown flushes and closes the TracerProvider.
 func Shutdown(ctx context.Context, tp *sdktrace.TracerProvider) {
 	if tp == nil {
 		return

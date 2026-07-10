@@ -13,7 +13,12 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	domainVerification "github.com/freeDog-wy/go-backend-template/internal/domain/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var verificationTracer = otel.Tracer("github.com/freeDog-wy/go-backend-template/internal/usecase/verification")
 
 type Service struct {
 	tx             shared.TxManager
@@ -92,11 +97,22 @@ func (s *Service) ForgotPassword(ctx context.Context, cmd ForgotPasswordCmd) err
 	})
 }
 
-func (s *Service) VerifyEmail(ctx context.Context, cmd VerifyEmailCmd) error {
+func (s *Service) VerifyEmail(ctx context.Context, cmd VerifyEmailCmd) (err error) {
+	ctx, span := verificationTracer.Start(ctx, "verification.verify_email")
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+		span.End()
+	}()
+
 	now := time.Now()
 	tokenHash := hashToken(cmd.Token)
 
-	return s.tx.Do(ctx, func(ctx context.Context) error {
+	err = s.tx.Do(ctx, func(ctx context.Context) error {
 		token, err := s.verifyRepo.FindActiveByTokenHash(ctx, tokenHash, now)
 		if err != nil {
 			if errors.Is(err, shared.ErrNotFound) {
@@ -112,6 +128,8 @@ func (s *Service) VerifyEmail(ctx context.Context, cmd VerifyEmailCmd) error {
 			}
 			return err
 		}
+
+		span.SetAttributes(attribute.Int64("app.user.id", int64(user.GetID())))
 
 		user.VerifyEmail()
 		if err := user.Activate(); err != nil {
@@ -138,14 +156,26 @@ func (s *Service) VerifyEmail(ctx context.Context, cmd VerifyEmailCmd) error {
 		})
 		return nil
 	})
+	return err
 }
 
-func (s *Service) ResetPassword(ctx context.Context, cmd ResetPasswordCmd) error {
+func (s *Service) ResetPassword(ctx context.Context, cmd ResetPasswordCmd) (err error) {
+	ctx, span := verificationTracer.Start(ctx, "verification.reset_password")
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+		span.End()
+	}()
+
 	now := time.Now()
 	tokenHash := hashToken(cmd.Token)
 
 	var userID uint
-	err := s.tx.Do(ctx, func(ctx context.Context) error {
+	err = s.tx.Do(ctx, func(ctx context.Context) error {
 		token, err := s.verifyRepo.FindActivePasswordResetByTokenHash(ctx, tokenHash, now)
 		if err != nil {
 			if errors.Is(err, shared.ErrNotFound) {
@@ -153,6 +183,8 @@ func (s *Service) ResetPassword(ctx context.Context, cmd ResetPasswordCmd) error
 			}
 			return err
 		}
+
+		span.SetAttributes(attribute.Int64("app.user.id", int64(token.GetUserID())))
 
 		credential, err := s.credentialRepo.FindByUserID(ctx, token.GetUserID())
 		if err != nil {

@@ -55,7 +55,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 }
 
 func initApp(cfg *config.Config) *App {
-	tp, err := tracing.Init(cfg.App.Mode, cfg.Tracing.Endpoint)
+	tp, err := tracing.Init(cfg.App.Mode, cfg.Tracing.Endpoint, "go-backend-template-server")
 	if err != nil {
 		panic("failed to init tracing: " + err.Error())
 	}

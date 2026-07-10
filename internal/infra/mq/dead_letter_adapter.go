@@ -131,10 +131,11 @@ func (q *deadLetterAdapter) decodeDeadLetter(record pkgkafka.DeadLetterRecord) (
 
 	return DeadLetterMessage{
 		Message: Message{
-			Key:     messageKey,
-			Event:   eventName,
-			Payload: record.Value,
-			TraceID: pkgkafka.HeaderValue(record.Headers, "trace_id"),
+			Key:          messageKey,
+			Event:        eventName,
+			Payload:      record.Value,
+			TraceID:      TraceIDFromHeaders(record.Headers),
+			TraceContext: SerializeHeadersTraceContext(record.Headers),
 		},
 		OriginalMessageID: pkgkafka.HeaderValue(record.Headers, "original_message_id"),
 		OriginalTopic:     originalTopicFromRecord(record),
@@ -168,7 +169,7 @@ func (q *deadLetterAdapter) buildReplayMessage(record pkgkafka.DeadLetterRecord)
 		{Key: "original_message_key", Value: []byte(message.Key)},
 	}
 	if message.TraceID != "" {
-		headers = append(headers, pkgkafka.Header{Key: "trace_id", Value: []byte(message.TraceID)})
+		headers = append(headers, pkgkafka.Header{Key: traceIDHeader, Value: []byte(message.TraceID)})
 	}
 	if strings.TrimSpace(message.OriginalTopic) != "" {
 		headers = append(headers, pkgkafka.Header{Key: "original_topic", Value: []byte(message.OriginalTopic)})
@@ -190,6 +191,12 @@ func (q *deadLetterAdapter) buildReplayMessage(record pkgkafka.DeadLetterRecord)
 	}
 	if message.DeadLetterOffset >= 0 {
 		headers = append(headers, pkgkafka.Header{Key: "dlq_source_offset", Value: []byte(strconv.FormatInt(message.DeadLetterOffset, 10))})
+	}
+	if strings.TrimSpace(message.TraceContext) != "" {
+		headers = InjectTraceContext(
+			ContextWithSerializedTraceContext(context.Background(), message.TraceContext),
+			headers,
+		)
 	}
 
 	return pkgkafka.Message{

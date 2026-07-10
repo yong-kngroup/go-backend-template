@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 )
@@ -23,10 +24,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	errCh := make(chan error, 1)
 	go func() {
-		if err := worker.Run(ctx); err != nil && err != context.Canceled {
-			log.Fatalf("worker stopped: %v", err)
-		}
+		errCh <- worker.Run(ctx)
 	}()
 
 	quit := make(chan os.Signal, 1)
@@ -35,4 +35,13 @@ func main() {
 
 	cancel()
 	log.Println("worker shutting down")
+
+	err := <-errCh
+	if err != nil && err != context.Canceled {
+		log.Fatalf("worker stopped: %v", err)
+	}
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	worker.Shutdown(shutdownCtx)
 }
