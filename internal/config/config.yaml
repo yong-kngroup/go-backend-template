@@ -21,6 +21,9 @@ redis:
   db: 0
 
 worker:
+  probe:
+    ip: "0.0.0.0"
+    port: 8081
   consumer_group: "user-worker"
   consumer_max_retries: 10
   consumer_processing_lock_seconds: 300
@@ -56,6 +59,9 @@ tracing:
   endpoint: "localhost:4318"
 
 cron:
+  probe:
+    ip: "0.0.0.0"
+    port: 8082
   enabled: true
   outbox_publish_interval_seconds: 5
   outbox_batch_size: 100

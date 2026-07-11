@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
+	HdlHealth "github.com/freeDog-wy/go-backend-template/internal/handler/health"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
@@ -21,13 +24,17 @@ import (
 )
 
 type CronApp struct {
-	enabled bool
-	logger  logger.Logger
-	runner  *scheduler.Runner
-	tp      *sdktrace.TracerProvider
+	enabled     bool
+	logger      logger.Logger
+	runner      *scheduler.Runner
+	probeServer *HdlHealth.Server
+	running     atomic.Bool
+	tp          *sdktrace.TracerProvider
 }
 
 func (a *CronApp) Run(ctx context.Context) error {
+	a.running.Store(true)
+	defer a.running.Store(false)
 	if !a.enabled {
 		a.logger.Info("cron is disabled by configuration")
 		<-ctx.Done()
@@ -37,8 +44,14 @@ func (a *CronApp) Run(ctx context.Context) error {
 	return a.runner.Run(ctx)
 }
 
-func (a *CronApp) Shutdown(ctx context.Context) {
+func (a *CronApp) ServeProbe() error {
+	return a.probeServer.Serve()
+}
+
+func (a *CronApp) Shutdown(ctx context.Context) error {
+	err := a.probeServer.Shutdown(ctx)
 	tracing.Shutdown(ctx, a.tp)
+	return err
 }
 
 func initCronApp(cfg *config.Config) *CronApp {
@@ -49,6 +62,20 @@ func initCronApp(cfg *config.Config) *CronApp {
 
 	appLogger := logging.Init(cfg.App.Mode)
 	runner := scheduler.New(appLogger)
+	cronApp := &CronApp{
+		enabled: cfg.Cron.Enabled,
+		logger:  appLogger,
+		runner:  runner,
+		tp:      tp,
+	}
+	checks := map[string]HdlHealth.Checker{
+		"scheduler": HdlHealth.CheckFunc(func(context.Context) error {
+			if !cronApp.running.Load() {
+				return errors.New("scheduler loop is not running")
+			}
+			return nil
+		}),
+	}
 	if cfg.Cron.Enabled {
 		if cfg.Cron.OutboxPublishIntervalSeconds <= 0 {
 			panic("cron.outbox_publish_interval_seconds must be greater than zero")
@@ -61,6 +88,14 @@ func initCronApp(cfg *config.Config) *CronApp {
 		}
 
 		db := database.NewPostgresDB(cfg.Database.DSN)
+		sqlDB, err := db.DB()
+		if err != nil {
+			panic("failed to get database health check handle: " + err.Error())
+		}
+		checks["database"] = HdlHealth.CheckFunc(sqlDB.PingContext)
+		checks["kafka"] = HdlHealth.CheckFunc(func(ctx context.Context) error {
+			return mq.PingKafka(ctx, cfg.MQ.Kafka.Brokers)
+		})
 
 		outboxRepo := RepoOutbox.New(db)
 		publisher := mq.NewPublisherFromConfig(cfg, appLogger)
@@ -92,12 +127,8 @@ func initCronApp(cfg *config.Config) *CronApp {
 		registerKafkaDLQJobs(cfg, appLogger, runner)
 	}
 
-	return &CronApp{
-		enabled: cfg.Cron.Enabled,
-		logger:  appLogger,
-		runner:  runner,
-		tp:      tp,
-	}
+	cronApp.probeServer = HdlHealth.NewServer(cfg.Cron.Probe.Address(), checks, 2*time.Second)
+	return cronApp
 }
 
 func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *scheduler.Runner) {

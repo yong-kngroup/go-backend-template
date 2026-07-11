@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/freeDog-wy/go-backend-template/pkg/envfile"
@@ -58,6 +60,7 @@ type AppConfig struct {
 }
 
 type WorkerConfig struct {
+	Probe                         ProbeConfig             `mapstructure:"probe"`
 	ConsumerGroup                 string                  `mapstructure:"consumer_group"`
 	ConsumerMaxRetries            int                     `mapstructure:"consumer_max_retries"`
 	ConsumerProcessingLockSeconds int                     `mapstructure:"consumer_processing_lock_seconds"`
@@ -66,6 +69,15 @@ type WorkerConfig struct {
 	KafkaMaxWaitSeconds           int                     `mapstructure:"kafka_max_wait_seconds"`
 	KafkaRetryTopics              []KafkaRetryTopicConfig `mapstructure:"kafka_retry_topics"`
 	KafkaDeadLetterTopic          string                  `mapstructure:"kafka_dead_letter_topic"`
+}
+
+type ProbeConfig struct {
+	IP   string
+	Port int
+}
+
+func (c ProbeConfig) Address() string {
+	return net.JoinHostPort(c.IP, strconv.Itoa(c.Port))
 }
 
 type KafkaRetryTopicConfig struct {
@@ -97,6 +109,7 @@ type CaptchaConfig struct {
 }
 
 type CronConfig struct {
+	Probe                              ProbeConfig `mapstructure:"probe"`
 	Enabled                            bool
 	OutboxPublishIntervalSeconds       int    `mapstructure:"outbox_publish_interval_seconds"`
 	OutboxBatchSize                    int    `mapstructure:"outbox_batch_size"`
@@ -148,6 +161,8 @@ func Load(configPath string) *Config {
 	v.SetDefault("auth.refreshTokenTTLHours", 24*7)
 	v.SetDefault("auth.loginFailThreshold", 5)
 	v.SetDefault("worker.consumer_group", "user-worker")
+	v.SetDefault("worker.probe.ip", "0.0.0.0")
+	v.SetDefault("worker.probe.port", 8081)
 	v.SetDefault("worker.consumer_max_retries", 10)
 	v.SetDefault("worker.consumer_processing_lock_seconds", 300)
 	v.SetDefault("worker.kafka_read_min_bytes", 1024)
@@ -164,6 +179,8 @@ func Load(configPath string) *Config {
 	v.SetDefault("captcha.height", 40)
 	v.SetDefault("captcha.length", 6)
 	v.SetDefault("cron.enabled", true)
+	v.SetDefault("cron.probe.ip", "0.0.0.0")
+	v.SetDefault("cron.probe.port", 8082)
 	v.SetDefault("cron.outbox_publish_interval_seconds", 5)
 	v.SetDefault("cron.outbox_batch_size", 100)
 	v.SetDefault("cron.verification_cleanup_interval_seconds", 300)
@@ -236,11 +253,11 @@ var configEnvBindings = map[string]string{
 	"database.dsn":   "DATABASE_DSN",
 	"mq.events_name": "MQ_EVENTS_NAME", "mq.kafka.brokers": "MQ_KAFKA_BROKERS", "mq.kafka.client_id": "MQ_KAFKA_CLIENT_ID",
 	"redis.addr": "REDIS_ADDR", "redis.password": "REDIS_PASSWORD", "redis.db": "REDIS_DB",
-	"worker.consumer_group": "WORKER_CONSUMER_GROUP", "worker.consumer_max_retries": "WORKER_CONSUMER_MAX_RETRIES", "worker.consumer_processing_lock_seconds": "WORKER_CONSUMER_PROCESSING_LOCK_SECONDS", "worker.kafka_read_min_bytes": "WORKER_KAFKA_READ_MIN_BYTES", "worker.kafka_read_max_bytes": "WORKER_KAFKA_READ_MAX_BYTES", "worker.kafka_max_wait_seconds": "WORKER_KAFKA_MAX_WAIT_SECONDS", "worker.kafka_dead_letter_topic": "WORKER_KAFKA_DEAD_LETTER_TOPIC",
+	"worker.consumer_group": "WORKER_CONSUMER_GROUP", "worker.probe.ip": "WORKER_PROBE_IP", "worker.probe.port": "WORKER_PROBE_PORT", "worker.consumer_max_retries": "WORKER_CONSUMER_MAX_RETRIES", "worker.consumer_processing_lock_seconds": "WORKER_CONSUMER_PROCESSING_LOCK_SECONDS", "worker.kafka_read_min_bytes": "WORKER_KAFKA_READ_MIN_BYTES", "worker.kafka_read_max_bytes": "WORKER_KAFKA_READ_MAX_BYTES", "worker.kafka_max_wait_seconds": "WORKER_KAFKA_MAX_WAIT_SECONDS", "worker.kafka_dead_letter_topic": "WORKER_KAFKA_DEAD_LETTER_TOPIC",
 	"auth.jwtIssuer": "AUTH_JWT_ISSUER", "auth.jwtAudience": "AUTH_JWT_AUDIENCE", "auth.jwtSecret": "AUTH_JWT_SECRET", "auth.accessTokenTTLMinutes": "AUTH_ACCESS_TOKEN_TTL_MINUTES", "auth.refreshTokenTTLHours": "AUTH_REFRESH_TOKEN_TTL_HOURS", "auth.loginFailThreshold": "AUTH_LOGIN_FAIL_THRESHOLD",
 	"email.smtpHost": "EMAIL_SMTP_HOST", "email.smtpPort": "EMAIL_SMTP_PORT", "email.smtpUser": "EMAIL_SMTP_USER", "email.smtpPassword": "EMAIL_SMTP_PASSWORD", "email.fromAddress": "EMAIL_FROM_ADDRESS", "email.siteBaseURL": "EMAIL_SITE_BASE_URL",
 	"captcha.width": "CAPTCHA_WIDTH", "captcha.height": "CAPTCHA_HEIGHT", "captcha.length": "CAPTCHA_LENGTH",
-	"cron.enabled": "CRON_ENABLED", "cron.outbox_publish_interval_seconds": "CRON_OUTBOX_PUBLISH_INTERVAL_SECONDS", "cron.outbox_batch_size": "CRON_OUTBOX_BATCH_SIZE", "cron.verification_cleanup_interval_seconds": "CRON_VERIFICATION_CLEANUP_INTERVAL_SECONDS",
+	"cron.enabled": "CRON_ENABLED", "cron.probe.ip": "CRON_PROBE_IP", "cron.probe.port": "CRON_PROBE_PORT", "cron.outbox_publish_interval_seconds": "CRON_OUTBOX_PUBLISH_INTERVAL_SECONDS", "cron.outbox_batch_size": "CRON_OUTBOX_BATCH_SIZE", "cron.verification_cleanup_interval_seconds": "CRON_VERIFICATION_CLEANUP_INTERVAL_SECONDS",
 	"tracing.endpoint":        "TRACING_ENDPOINT",
 	"bootstrap_admin.enabled": "BOOTSTRAP_ADMIN_ENABLED", "bootstrap_admin.name": "BOOTSTRAP_ADMIN_NAME", "bootstrap_admin.email": "BOOTSTRAP_ADMIN_EMAIL", "bootstrap_admin.password": "BOOTSTRAP_ADMIN_PASSWORD",
 }

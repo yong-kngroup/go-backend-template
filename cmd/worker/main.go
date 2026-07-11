@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -24,24 +26,61 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	errCh := make(chan error, 1)
+	type componentResult struct {
+		name string
+		err  error
+	}
+	errCh := make(chan componentResult, 2)
 	go func() {
-		errCh <- worker.Run(ctx)
+		errCh <- componentResult{name: "consumer", err: worker.Run(ctx)}
+	}()
+	go func() {
+		errCh <- componentResult{name: "probe server", err: worker.ServeProbe()}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	defer signal.Stop(quit)
+
+	var terminalErr error
+	received := 0
+	select {
+	case signal := <-quit:
+		log.Printf("worker received signal %s, shutting down", signal)
+	case result := <-errCh:
+		received++
+		terminalErr = componentError(result.name, result.err, false)
+	}
 
 	cancel()
-	log.Println("worker shutting down")
-
-	err := <-errCh
-	if err != nil && err != context.Canceled {
-		log.Fatalf("worker stopped: %v", err)
-	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
-	worker.Shutdown(shutdownCtx)
+	if err := worker.Shutdown(shutdownCtx); err != nil && terminalErr == nil {
+		terminalErr = fmt.Errorf("shutdown worker: %w", err)
+	}
+
+	for received < 2 {
+		result := <-errCh
+		received++
+		if err := componentError(result.name, result.err, true); err != nil && terminalErr == nil {
+			terminalErr = err
+		}
+	}
+	if terminalErr != nil {
+		log.Fatal(terminalErr)
+	}
+}
+
+func componentError(name string, err error, stopping bool) error {
+	if stopping && (err == nil || errors.Is(err, context.Canceled)) {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	if err == nil {
+		return fmt.Errorf("%s stopped unexpectedly", name)
+	}
+	return fmt.Errorf("%s stopped: %w", name, err)
 }
