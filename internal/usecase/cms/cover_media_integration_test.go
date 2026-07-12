@@ -5,7 +5,11 @@ package cms
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -80,7 +84,8 @@ func TestCoverMediaIntegrationUploadCompleteAndPublish(t *testing.T) {
 		t.Fatalf("publish article: %v", err)
 	}
 
-	upload, err := mediaSvc.RequestUpload(ctx, svcMedia.UploadRequest{Filename: "cover.png", ContentType: "image/png", SizeBytes: 18, UserID: userID})
+	payload := tinyPNG(t)
+	upload, err := mediaSvc.RequestUpload(ctx, svcMedia.UploadRequest{Filename: "cover.png", ContentType: "image/png", SizeBytes: int64(len(payload)), UserID: userID})
 	if err != nil {
 		t.Fatalf("request upload: %v", err)
 	}
@@ -88,7 +93,6 @@ func TestCoverMediaIntegrationUploadCompleteAndPublish(t *testing.T) {
 		t.Fatal("set pending media as cover succeeded")
 	}
 
-	payload := []byte("cover-image-content")
 	if err := putPresignedUpload(ctx, upload.UploadURL, upload.Headers, payload); err != nil {
 		t.Fatalf("upload cover to S3: %v", err)
 	}
@@ -99,7 +103,7 @@ func TestCoverMediaIntegrationUploadCompleteAndPublish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find completed media: %v", err)
 	}
-	if asset.Status != "ready" || asset.SizeBytes != int64(len(payload)) {
+	if asset.Status != "ready" || asset.SizeBytes != int64(len(payload)) || asset.Width != 2 || asset.Height != 3 {
 		t.Fatalf("completed media = %#v", asset)
 	}
 	if err := mediaSvc.UpsertTranslation(ctx, upload.ID, "zh-CN", "Article cover", "Cover title"); err != nil {
@@ -119,6 +123,39 @@ func TestCoverMediaIntegrationUploadCompleteAndPublish(t *testing.T) {
 	if publicArticle.Cover.ID != upload.ID || publicArticle.Cover.URL != "https://cdn.example.test/"+upload.ObjectKey || publicArticle.Cover.AltText != "Article cover" || publicArticle.Cover.Title != "Cover title" {
 		t.Fatalf("published article cover = %#v", publicArticle.Cover)
 	}
+
+	spoofedPayload := []byte("not an image")
+	spoofed, err := mediaSvc.RequestUpload(ctx, svcMedia.UploadRequest{Filename: "spoofed.png", ContentType: "image/png", SizeBytes: int64(len(spoofedPayload)), UserID: userID})
+	if err != nil {
+		t.Fatalf("request spoofed upload: %v", err)
+	}
+	if err := putPresignedUpload(ctx, spoofed.UploadURL, spoofed.Headers, spoofedPayload); err != nil {
+		t.Fatalf("upload spoofed object: %v", err)
+	}
+	if err := mediaSvc.Complete(ctx, spoofed.ID, userID); !errors.Is(err, svcMedia.ErrMediaValidationFailed) {
+		t.Fatalf("complete spoofed object error = %v, want validation failure", err)
+	}
+	spoofedAsset, err := mediaRepo.Find(ctx, spoofed.ID)
+	if err != nil {
+		t.Fatalf("find spoofed media: %v", err)
+	}
+	if spoofedAsset.Status != "failed" {
+		t.Fatalf("spoofed media status = %q, want failed", spoofedAsset.Status)
+	}
+	if err := cmsSvc.SetArticleCover(ctx, SetArticleCoverCmd{ArticleID: article.ID, MediaID: &spoofed.ID, ActorUserID: userID}); err == nil {
+		t.Fatal("set failed media as cover succeeded")
+	}
+}
+
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+	imageData := image.NewRGBA(image.Rect(0, 0, 2, 3))
+	imageData.Set(0, 0, color.RGBA{R: 255, A: 255})
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, imageData); err != nil {
+		t.Fatalf("encode PNG fixture: %v", err)
+	}
+	return buffer.Bytes()
 }
 
 func putPresignedUpload(ctx context.Context, url string, headers map[string]string, payload []byte) error {

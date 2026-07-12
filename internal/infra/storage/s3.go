@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -54,6 +55,14 @@ func (s *S3) HeadObject(ctx context.Context, key string) (*domainMedia.ObjectInf
 		return nil, err
 	}
 	return &domainMedia.ObjectInfo{ContentType: aws.ToString(out.ContentType), Size: aws.ToInt64(out.ContentLength)}, nil
+}
+
+func (s *S3) OpenObject(ctx context.Context, key string) (io.ReadCloser, error) {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return nil, err
+	}
+	return out.Body, nil
 }
 
 func (s *S3) ObjectKey(name string) string {

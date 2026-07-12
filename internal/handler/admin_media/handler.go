@@ -96,6 +96,10 @@ func (h *Handler) Translate(c *gin.Context) {
 	handler.OK(c, gin.H{"id": n, "locale": c.Param("locale")})
 }
 func fail(c *gin.Context, err error) {
+	if errors.Is(err, media.ErrMediaValidationFailed) {
+		handler.Fail(c, "MEDIA_VALIDATION_FAILED", "uploaded object is not a valid image")
+		return
+	}
 	if errors.Is(err, shared.ErrNotFound) {
 		handler.Fail(c, "MEDIA_NOT_FOUND", "media not found")
 		return

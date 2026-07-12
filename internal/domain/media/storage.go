@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -10,6 +11,7 @@ type Storage interface {
 	ObjectKey(name string) string
 	PresignUpload(ctx context.Context, key, contentType string) (*PresignedUpload, error)
 	HeadObject(ctx context.Context, key string) (*ObjectInfo, error)
+	OpenObject(ctx context.Context, key string) (io.ReadCloser, error)
 	PublicURL(key string) string
 }
 

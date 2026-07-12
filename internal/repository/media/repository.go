@@ -28,8 +28,8 @@ func (r *Repository) Find(ctx context.Context, id uint) (*model.Asset, error) {
 	}
 	return &a, nil
 }
-func (r *Repository) MarkReady(ctx context.Context, id uint, mime string, size int64) error {
-	res := database.DB(ctx, r.db).Model(&model.Asset{}).Where("id = ? AND status = 'pending'", id).Updates(map[string]any{"status": "ready", "mime_type": mime, "size_bytes": size})
+func (r *Repository) MarkReady(ctx context.Context, id uint, mime string, size int64, width, height int) error {
+	res := database.DB(ctx, r.db).Model(&model.Asset{}).Where("id = ? AND status = 'pending'", id).Updates(map[string]any{"status": "ready", "mime_type": mime, "size_bytes": size, "width": width, "height": height})
 	if res.Error != nil {
 		return res.Error
 	}
@@ -39,7 +39,14 @@ func (r *Repository) MarkReady(ctx context.Context, id uint, mime string, size i
 	return nil
 }
 func (r *Repository) MarkFailed(ctx context.Context, id uint) error {
-	return database.DB(ctx, r.db).Model(&model.Asset{}).Where("id = ?", id).Update("status", "failed").Error
+	res := database.DB(ctx, r.db).Model(&model.Asset{}).Where("id = ? AND status = 'pending'", id).Update("status", "failed")
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return shared.ErrNotFound
+	}
+	return nil
 }
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]model.Asset, int64, error) {
 	var total int64

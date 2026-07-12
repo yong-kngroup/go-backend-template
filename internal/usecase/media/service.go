@@ -3,17 +3,27 @@ package media
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
+	"time"
+
 	domainMedia "github.com/freeDog-wy/go-backend-template/internal/domain/media"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	model "github.com/freeDog-wy/go-backend-template/internal/model/media"
 	"github.com/freeDog-wy/go-backend-template/internal/repository/media"
+	"github.com/freeDog-wy/go-backend-template/pkg/imagevalidate"
 	"github.com/google/uuid"
-	"path/filepath"
-	"strings"
-	"time"
 )
 
 const maxImageBytes int64 = 10 * 1024 * 1024
+
+var imageConstraints = imagevalidate.Constraints{
+	MaxBytes:            maxImageBytes,
+	MaxWidth:            8192,
+	MaxHeight:           8192,
+	MaxPixels:           16 * 1024 * 1024,
+	AllowedContentTypes: []string{"image/jpeg", "image/png", "image/webp"},
+}
 
 type Service struct {
 	tx      shared.TxManager
@@ -140,17 +150,30 @@ func (s *Service) Complete(ctx context.Context, id, userID uint) error {
 	}
 	info, err := s.storage.HeadObject(ctx, a.ObjectKey)
 	if err != nil {
-		return s.repo.MarkFailed(ctx, id)
+		return s.failValidation(ctx, id)
 	}
-	if !allowed(info.ContentType) || info.Size <= 0 || info.Size > maxImageBytes {
-		return s.repo.MarkFailed(ctx, id)
+	if info.Size <= 0 || info.Size > maxImageBytes || info.Size != a.SizeBytes || imagevalidate.NormalizeContentType(info.ContentType) != imagevalidate.NormalizeContentType(a.MimeType) {
+		return s.failValidation(ctx, id)
 	}
-	return s.repo.MarkReady(ctx, id, info.ContentType, info.Size)
+	body, err := s.storage.OpenObject(ctx, a.ObjectKey)
+	if err != nil {
+		return s.failValidation(ctx, id)
+	}
+	defer body.Close()
+	metadata, err := imagevalidate.Validate(body, a.MimeType, info.Size, imageConstraints)
+	if err != nil {
+		return s.failValidation(ctx, id)
+	}
+	return s.repo.MarkReady(ctx, id, metadata.ContentType, info.Size, metadata.Width, metadata.Height)
 }
-func allowed(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "image/jpeg", "image/png", "image/webp", "image/avif":
-		return true
+
+func (s *Service) failValidation(ctx context.Context, id uint) error {
+	if err := s.repo.MarkFailed(ctx, id); err != nil {
+		return err
 	}
-	return false
+	return ErrMediaValidationFailed
+}
+
+func allowed(v string) bool {
+	return imagevalidate.SupportsContentType(v, imageConstraints)
 }
