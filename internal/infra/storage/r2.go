@@ -11,13 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	appConfig "github.com/freeDog-wy/go-backend-template/internal/config"
+	usecaseMedia "github.com/freeDog-wy/go-backend-template/internal/usecase/media"
 )
 
-type PresignedUpload struct {
-	URL       string
-	Headers   map[string]string
-	ExpiresAt time.Time
-}
 type R2 struct {
 	bucket, prefix string
 	client         *s3.Client
@@ -41,17 +37,12 @@ func NewR2(ctx context.Context, cfg appConfig.R2Config) (*R2, error) {
 	return &R2{bucket: cfg.Bucket, prefix: strings.Trim(cfg.Prefix, "/"), client: client, presigner: s3.NewPresignClient(client), ttl: ttl}, nil
 }
 
-type ObjectInfo struct {
-	ContentType string
-	Size        int64
-}
-
-func (r *R2) HeadObject(ctx context.Context, key string) (*ObjectInfo, error) {
+func (r *R2) HeadObject(ctx context.Context, key string) (*usecaseMedia.ObjectInfo, error) {
 	out, err := r.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(r.bucket), Key: aws.String(key)})
 	if err != nil {
 		return nil, err
 	}
-	return &ObjectInfo{ContentType: aws.ToString(out.ContentType), Size: aws.ToInt64(out.ContentLength)}, nil
+	return &usecaseMedia.ObjectInfo{ContentType: aws.ToString(out.ContentType), Size: aws.ToInt64(out.ContentLength)}, nil
 }
 func (r *R2) ObjectKey(name string) string {
 	name = strings.TrimLeft(name, "/")
@@ -60,10 +51,10 @@ func (r *R2) ObjectKey(name string) string {
 	}
 	return r.prefix + "/" + name
 }
-func (r *R2) PresignUpload(ctx context.Context, key, contentType string) (*PresignedUpload, error) {
+func (r *R2) PresignUpload(ctx context.Context, key, contentType string) (*usecaseMedia.PresignedUpload, error) {
 	request, err := r.presigner.PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(r.bucket), Key: aws.String(key), ContentType: aws.String(contentType)}, s3.WithPresignExpires(r.ttl))
 	if err != nil {
 		return nil, err
 	}
-	return &PresignedUpload{URL: request.URL, Headers: map[string]string{"Content-Type": contentType}, ExpiresAt: time.Now().Add(r.ttl)}, nil
+	return &usecaseMedia.PresignedUpload{URL: request.URL, Headers: map[string]string{"Content-Type": contentType}, ExpiresAt: time.Now().Add(r.ttl)}, nil
 }
