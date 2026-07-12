@@ -41,3 +41,19 @@ type PublicArticleResult struct {
 	CanonicalURL   string     `json:"canonical_url"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
+type PublicArticleListResult struct {
+	ID              uint               `json:"id"`
+	Locale          string             `json:"locale"`
+	Title           string             `json:"title"`
+	Slug            string             `json:"slug"`
+	Summary         string             `json:"summary"`
+	ContentFormat   string             `json:"content_format"`
+	PublishedAt     *time.Time         `json:"published_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+	PrimaryCategory *PublicCategoryRef `json:"primary_category,omitempty"`
+}
+type PublicCategoryRef struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}

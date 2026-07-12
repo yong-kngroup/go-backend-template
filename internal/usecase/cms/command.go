@@ -42,3 +42,12 @@ type ListArticlesCmd struct {
 	Locale string
 	Page   shared.PageQuery
 }
+type ListPublicArticlesCmd struct {
+	Locale string
+	Page   shared.PageQuery
+}
+type ListPublicCategoryArticlesCmd struct {
+	Locale       string
+	CategorySlug string
+	Page         shared.PageQuery
+}

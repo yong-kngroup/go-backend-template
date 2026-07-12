@@ -140,6 +140,19 @@ func (s *Service) ListCategories(ctx context.Context, cmd ListCategoriesCmd) ([]
 	if err != nil {
 		return nil, err
 	}
+	return categoryTree(items), nil
+}
+func (s *Service) ListPublishedCategories(ctx context.Context, locale string) ([]*CategoryTreeResult, error) {
+	if err := s.requireLocale(ctx, locale); err != nil {
+		return nil, err
+	}
+	items, err := s.repo.ListPublicCategoryTreeItems(ctx, locale)
+	if err != nil {
+		return nil, err
+	}
+	return categoryTree(items), nil
+}
+func categoryTree(items []*domainCMS.CategoryTreeItem) []*CategoryTreeResult {
 	byID := make(map[uint]*CategoryTreeResult, len(items))
 	for _, item := range items {
 		byID[item.ID] = &CategoryTreeResult{ID: item.ID, ParentID: item.ParentID, SortOrder: item.SortOrder, Name: item.Name, Slug: item.Slug, Description: item.Description, Children: make([]*CategoryTreeResult, 0)}
@@ -155,7 +168,7 @@ func (s *Service) ListCategories(ctx context.Context, cmd ListCategoriesCmd) ([]
 		}
 		roots = append(roots, node)
 	}
-	return roots, nil
+	return roots
 }
 func (s *Service) ReplaceArticleCategories(ctx context.Context, cmd ReplaceArticleCategoriesCmd) error {
 	if cmd.ArticleID == 0 {
@@ -212,6 +225,44 @@ func (s *Service) GetPublishedArticle(ctx context.Context, locale, slug string) 
 		return nil, err
 	}
 	return &PublicArticleResult{ID: a.Article.ID, Locale: a.Locale, Title: a.Title, Slug: a.Slug, Summary: a.Summary, Content: a.Content, ContentFormat: a.ContentFormat, PublishedAt: a.PublishedAt, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CanonicalURL: a.CanonicalURL, UpdatedAt: a.ArticleTranslation.UpdatedAt}, nil
+}
+func (s *Service) ListPublishedArticles(ctx context.Context, cmd ListPublicArticlesCmd) ([]*PublicArticleListResult, shared.PageResult, error) {
+	return s.listPublishedArticles(ctx, cmd.Locale, nil, cmd.Page)
+}
+func (s *Service) ListPublishedCategoryArticles(ctx context.Context, cmd ListPublicCategoryArticlesCmd) ([]*PublicArticleListResult, shared.PageResult, error) {
+	if strings.TrimSpace(cmd.CategorySlug) == "" {
+		return nil, shared.PageResult{}, domainCMS.ErrInvalidInput
+	}
+	if err := s.requireLocale(ctx, cmd.Locale); err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	exists, err := s.repo.PublicCategoryExists(ctx, cmd.Locale, cmd.CategorySlug)
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	if !exists {
+		return nil, shared.PageResult{}, domainCMS.ErrCategoryNotFound
+	}
+	return s.listPublishedArticles(ctx, cmd.Locale, &cmd.CategorySlug, cmd.Page)
+}
+func (s *Service) listPublishedArticles(ctx context.Context, locale string, categorySlug *string, page shared.PageQuery) ([]*PublicArticleListResult, shared.PageResult, error) {
+	if err := s.requireLocale(ctx, locale); err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	page = shared.NewPageQuery(page.Page, page.PerPage)
+	items, total, err := s.repo.ListPublicArticles(ctx, locale, categorySlug, page)
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	results := make([]*PublicArticleListResult, 0, len(items))
+	for _, item := range items {
+		result := &PublicArticleListResult{ID: item.Article.ID, Locale: item.Locale, Title: item.Title, Slug: item.Slug, Summary: item.Summary, ContentFormat: item.ContentFormat, PublishedAt: item.PublishedAt, UpdatedAt: item.ArticleTranslation.UpdatedAt}
+		if item.PrimaryCategoryID != nil {
+			result.PrimaryCategory = &PublicCategoryRef{ID: *item.PrimaryCategoryID, Name: item.PrimaryCategoryName, Slug: item.PrimaryCategorySlug}
+		}
+		results = append(results, result)
+	}
+	return results, shared.PageResult{Page: page.Page, PerPage: page.PerPage, Total: total}, nil
 }
 func (s *Service) translation(ctx context.Context, id uint, locale string) (*domainCMS.ArticleTranslation, error) {
 	if id == 0 || strings.TrimSpace(locale) == "" {

@@ -57,6 +57,29 @@ func TestRepositoryIntegrationCMSConstraintsAndPublicVisibility(t *testing.T) {
 	if got, err := repo.FindPublicArticle(ctx, "zh-CN", translation2.Slug); err != nil || got.Article.ID != article2.ID {
 		t.Fatalf("public article = %#v, %v", got, err)
 	}
+	if err := repo.ReplaceArticleCategories(ctx, article2.ID, []uint{category.ID}, &category.ID); err != nil {
+		t.Fatalf("set published article category: %v", err)
+	}
+	publicArticles, total, err := repo.ListPublicArticles(ctx, "zh-CN", nil, shared.NewPageQuery(1, 20))
+	if err != nil || total != 1 || len(publicArticles) != 1 || publicArticles[0].Article.ID != article2.ID {
+		t.Fatalf("public list = %#v, total=%d, err=%v", publicArticles, total, err)
+	}
+	categorySlug := "root"
+	categoryArticles, total, err := repo.ListPublicArticles(ctx, "zh-CN", &categorySlug, shared.NewPageQuery(1, 20))
+	if err != nil || total != 1 || len(categoryArticles) != 1 || categoryArticles[0].Article.ID != article2.ID {
+		t.Fatalf("category public list = %#v, total=%d, err=%v", categoryArticles, total, err)
+	}
+	disabled, err := createCategory(ctx, repo, "disabled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&modelCMS.Category{}).Where("id = ?", disabled.ID).Update("is_enabled", false).Error; err != nil {
+		t.Fatalf("disable category: %v", err)
+	}
+	publicCategories, err := repo.ListPublicCategoryTreeItems(ctx, "zh-CN")
+	if err != nil || len(publicCategories) != 1 || publicCategories[0].ID != category.ID {
+		t.Fatalf("public categories = %#v, err=%v", publicCategories, err)
+	}
 
 	if err := repo.ReplaceArticleCategories(ctx, article.ID, []uint{category.ID}, &category.ID); err != nil {
 		t.Fatalf("set primary category: %v", err)

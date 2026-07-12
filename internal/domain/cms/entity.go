@@ -69,3 +69,11 @@ type ArticleListItem struct {
 	Article
 	ArticleTranslation
 }
+
+type PublicArticleListItem struct {
+	Article
+	ArticleTranslation
+	PrimaryCategoryID   *uint
+	PrimaryCategoryName string
+	PrimaryCategorySlug string
+}

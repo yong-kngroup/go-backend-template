@@ -19,6 +19,7 @@ type testRepo struct {
 	public     *domainCMS.PublicArticle
 	tree       []*domainCMS.CategoryTreeItem
 	replaced   []uint
+	publicList []*domainCMS.PublicArticleListItem
 }
 
 func (*testRepo) LocaleEnabled(context.Context, string) (bool, error) { return true, nil }
@@ -66,6 +67,15 @@ func (r *testRepo) FindPublicArticle(context.Context, string, string) (*domainCM
 		return nil, shared.ErrNotFound
 	}
 	return r.public, nil
+}
+func (r *testRepo) ListPublicCategoryTreeItems(context.Context, string) ([]*domainCMS.CategoryTreeItem, error) {
+	return r.tree, nil
+}
+func (*testRepo) PublicCategoryExists(context.Context, string, string) (bool, error) {
+	return true, nil
+}
+func (r *testRepo) ListPublicArticles(context.Context, string, *string, shared.PageQuery) ([]*domainCMS.PublicArticleListItem, int64, error) {
+	return r.publicList, int64(len(r.publicList)), nil
 }
 func TestMoveCategoryRejectsDescendantAsParent(t *testing.T) {
 	repo := &testRepo{descendant: true}
@@ -120,5 +130,21 @@ func TestReplaceArticleCategoriesRequiresPrimaryWithinCategories(t *testing.T) {
 	}
 	if len(repo.replaced) != 0 {
 		t.Fatalf("repository called with %#v", repo.replaced)
+	}
+}
+func TestListPublishedArticlesReturnsOnlySummaryFields(t *testing.T) {
+	categoryID := uint(4)
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	repo := &testRepo{publicList: []*domainCMS.PublicArticleListItem{{
+		Article:            domainCMS.Article{ID: 9},
+		ArticleTranslation: domainCMS.ArticleTranslation{Locale: "zh-CN", Title: "Published", Slug: "published", Summary: "Summary", Content: "must not be returned", ContentFormat: "markdown", PublishedAt: &now, UpdatedAt: now},
+		PrimaryCategoryID:  &categoryID, PrimaryCategoryName: "News", PrimaryCategorySlug: "news",
+	}}}
+	results, page, err := New(testTx{}, repo).ListPublishedArticles(context.Background(), ListPublicArticlesCmd{Locale: "zh-CN", Page: shared.NewPageQuery(1, 20)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].PrimaryCategory == nil || results[0].PrimaryCategory.Slug != "news" || page.Total != 1 {
+		t.Fatalf("result = %#v, page = %#v", results, page)
 	}
 }

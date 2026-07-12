@@ -21,6 +21,9 @@ type AdminService interface {
 
 type PublicContentService interface {
 	GetPublishedArticle(context.Context, string, string) (*PublicArticleResult, error)
+	ListPublishedArticles(context.Context, ListPublicArticlesCmd) ([]*PublicArticleListResult, shared.PageResult, error)
+	ListPublishedCategoryArticles(context.Context, ListPublicCategoryArticlesCmd) ([]*PublicArticleListResult, shared.PageResult, error)
+	ListPublishedCategories(context.Context, string) ([]*CategoryTreeResult, error)
 }
 
 var _ AdminService = (*Service)(nil)
