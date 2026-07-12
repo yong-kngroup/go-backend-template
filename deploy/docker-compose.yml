@@ -9,17 +9,11 @@ services:
       POSTGRES_DB: go_backend
     ports:
       - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql
-    restart: unless-stopped
 
   redis:
     image: redis:8.6.4
     ports:
       - "6379:6379"
-    volumes:
-      - redisdata:/data
-    restart: unless-stopped
 
   kafka:
     image: apache/kafka:4.2.1-rc5
@@ -43,18 +37,9 @@ services:
       KAFKA_NUM_PARTITIONS: 3
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
-    volumes:
-      - kafkadata:/var/lib/kafka/data
-    restart: unless-stopped
 
   jaeger:
     image: jaegertracing/jaeger:2.19.0
     ports:
       - "16686:16686"   # UI
       - "4318:4318"     # OTLP HTTP
-    restart: unless-stopped
-
-volumes:
-  pgdata:
-  redisdata:
-  kafkadata:

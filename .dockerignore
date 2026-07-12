@@ -1,0 +1,9 @@
+.env
+.git
+.github
+.tmp
+build
+doc
+deploy
+*.exe
+*.md
