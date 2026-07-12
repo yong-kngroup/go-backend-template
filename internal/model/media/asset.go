@@ -10,6 +10,10 @@ type Asset struct {
 	Width, Height                                 int
 	CreatedAt, UpdatedAt                          time.Time
 	DeletedAt                                     *time.Time
+	UploadExpiresAt                               *time.Time
+	CleanupAttempts                               int
+	CleanupLastError                              string
+	CleanupClaimedAt                              *time.Time
 }
 
 func (Asset) TableName() string { return "media_assets" }

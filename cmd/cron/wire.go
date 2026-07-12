@@ -12,15 +12,19 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	InfraStorage "github.com/freeDog-wy/go-backend-template/internal/infra/storage"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
+	RepoMedia "github.com/freeDog-wy/go-backend-template/internal/repository/media"
 	RepoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	RepoVerification "github.com/freeDog-wy/go-backend-template/internal/repository/verification"
+	UsecaseMedia "github.com/freeDog-wy/go-backend-template/internal/usecase/media"
 	UsecaseMessaging "github.com/freeDog-wy/go-backend-template/internal/usecase/messaging"
 	UsecaseSupport "github.com/freeDog-wy/go-backend-template/internal/usecase/support"
 	UsecaseVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"github.com/freeDog-wy/go-backend-template/pkg/scheduler"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"gorm.io/gorm"
 )
 
 type CronApp struct {
@@ -107,6 +111,7 @@ func initCronApp(cfg *config.Config) *CronApp {
 		)
 		verificationRepo := RepoVerification.New(db)
 		verificationCron := UsecaseVerification.NewCron(verificationRepo, appLogger)
+		registerMediaCleanupJob(cfg, appLogger, runner, db)
 
 		if err := runner.Register(scheduler.Job{
 			Name:     "outbox.publish_pending_events",
@@ -129,6 +134,34 @@ func initCronApp(cfg *config.Config) *CronApp {
 
 	cronApp.probeServer = HdlHealth.NewServer(cfg.Cron.Probe.Address(), checks, 2*time.Second)
 	return cronApp
+}
+
+func registerMediaCleanupJob(cfg *config.Config, appLogger logger.Logger, runner *scheduler.Runner, db *gorm.DB) {
+	if cfg.Storage.S3.Endpoint == "" || cfg.Storage.S3.AccessKeyID == "" || cfg.Storage.S3.SecretAccessKey == "" || cfg.Storage.S3.Bucket == "" {
+		appLogger.Info("media upload cleanup is disabled because S3 storage is not configured")
+		return
+	}
+	if cfg.Cron.MediaUploadCleanupIntervalSeconds <= 0 {
+		panic("cron.media_upload_cleanup_interval_seconds must be greater than zero")
+	}
+	if cfg.Cron.MediaUploadCleanupBatchSize <= 0 {
+		panic("cron.media_upload_cleanup_batch_size must be greater than zero")
+	}
+	storage, err := InfraStorage.NewS3(context.Background(), cfg.Storage.S3)
+	if err != nil {
+		panic("failed to initialize S3 storage for media cleanup: " + err.Error())
+	}
+	service := UsecaseMedia.New(database.NewTxManager(db), RepoMedia.New(db), storage)
+	if err := runner.Register(scheduler.Job{
+		Name:     "media.cleanup_expired_uploads",
+		Interval: time.Duration(cfg.Cron.MediaUploadCleanupIntervalSeconds) * time.Second,
+		Run: func(ctx context.Context) error {
+			_, err := service.CleanupExpiredUploads(ctx, cfg.Cron.MediaUploadCleanupBatchSize)
+			return err
+		},
+	}); err != nil {
+		panic("failed to register media cleanup job: " + err.Error())
+	}
 }
 
 func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *scheduler.Runner) {

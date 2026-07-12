@@ -12,6 +12,7 @@ type Storage interface {
 	PresignUpload(ctx context.Context, key, contentType string) (*PresignedUpload, error)
 	HeadObject(ctx context.Context, key string) (*ObjectInfo, error)
 	OpenObject(ctx context.Context, key string) (io.ReadCloser, error)
+	DeleteObject(ctx context.Context, key string) error
 	PublicURL(key string) string
 }
 

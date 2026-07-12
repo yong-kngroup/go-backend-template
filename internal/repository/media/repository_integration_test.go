@@ -42,8 +42,12 @@ func TestRepositoryIntegrationListReadyPublic(t *testing.T) {
 	now := time.Now().UTC()
 	ready := &modelMedia.Asset{UploaderUserID: userID, ObjectKey: "cms/ready.png", OriginalFilename: "ready.png", MimeType: "image/png", SizeBytes: 10, Status: "ready"}
 	pending := &modelMedia.Asset{UploaderUserID: userID, ObjectKey: "cms/pending.png", OriginalFilename: "pending.png", MimeType: "image/png", SizeBytes: 10, Status: "pending"}
+	expiredAt := now.Add(-time.Minute)
+	expired := &modelMedia.Asset{UploaderUserID: userID, ObjectKey: "cms/expired.png", OriginalFilename: "expired.png", MimeType: "image/png", SizeBytes: 10, Status: "pending", UploadExpiresAt: &expiredAt}
+	futureExpiry := now.Add(time.Hour)
+	futurePending := &modelMedia.Asset{UploaderUserID: userID, ObjectKey: "cms/future.png", OriginalFilename: "future.png", MimeType: "image/png", SizeBytes: 10, Status: "pending", UploadExpiresAt: &futureExpiry}
 	deleted := &modelMedia.Asset{UploaderUserID: userID, ObjectKey: "cms/deleted.png", OriginalFilename: "deleted.png", MimeType: "image/png", SizeBytes: 10, Status: "ready", DeletedAt: &now}
-	for _, asset := range []*modelMedia.Asset{ready, pending, deleted} {
+	for _, asset := range []*modelMedia.Asset{ready, pending, expired, futurePending, deleted} {
 		if err := db.Create(asset).Error; err != nil {
 			t.Fatalf("create media asset: %v", err)
 		}
@@ -62,6 +66,32 @@ func TestRepositoryIntegrationListReadyPublic(t *testing.T) {
 	asset := assets[0]
 	if asset.ID != ready.ID || asset.ObjectKey != "cms/ready.png" || asset.AltText != "Ready cover" || asset.Title != "Ready title" {
 		t.Fatalf("public asset = %#v", asset)
+	}
+
+	repo := New(db)
+	claimed, err := repo.ClaimExpired(ctx, now, now.Add(-time.Minute), 10)
+	if err != nil {
+		t.Fatalf("claim expired media: %v", err)
+	}
+	if len(claimed) != 1 || claimed[0].ID != expired.ID {
+		t.Fatalf("claimed media = %#v", claimed)
+	}
+	var expiredAfterClaim modelMedia.Asset
+	if err := db.First(&expiredAfterClaim, expired.ID).Error; err != nil {
+		t.Fatalf("find claimed media: %v", err)
+	}
+	if expiredAfterClaim.Status != "expired" {
+		t.Fatalf("claimed media status = %q, want expired", expiredAfterClaim.Status)
+	}
+	if err := repo.RecordCleanupFailure(ctx, expired.ID, "temporary S3 error"); err != nil {
+		t.Fatalf("record cleanup failure: %v", err)
+	}
+	reclaimed, err := repo.ClaimExpired(ctx, now, now.Add(-time.Minute), 10)
+	if err != nil {
+		t.Fatalf("reclaim expired media: %v", err)
+	}
+	if len(reclaimed) != 1 || reclaimed[0].ID != expired.ID {
+		t.Fatalf("reclaimed media = %#v", reclaimed)
 	}
 }
 

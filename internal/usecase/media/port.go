@@ -10,4 +10,9 @@ type MediaAdminService interface {
 	UpsertTranslation(context.Context, uint, string, string, string) error
 }
 
+type MediaMaintenanceService interface {
+	CleanupExpiredUploads(context.Context, int) (int, error)
+}
+
 var _ MediaAdminService = (*Service)(nil)
+var _ MediaMaintenanceService = (*Service)(nil)

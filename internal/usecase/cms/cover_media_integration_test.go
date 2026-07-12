@@ -19,6 +19,7 @@ import (
 	appConfig "github.com/freeDog-wy/go-backend-template/internal/config"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	infraStorage "github.com/freeDog-wy/go-backend-template/internal/infra/storage"
+	modelMedia "github.com/freeDog-wy/go-backend-template/internal/model/media"
 	repoCMS "github.com/freeDog-wy/go-backend-template/internal/repository/cms"
 	repoMedia "github.com/freeDog-wy/go-backend-template/internal/repository/media"
 	"github.com/freeDog-wy/go-backend-template/internal/testsupport"
@@ -144,6 +145,54 @@ func TestCoverMediaIntegrationUploadCompleteAndPublish(t *testing.T) {
 	}
 	if err := cmsSvc.SetArticleCover(ctx, SetArticleCoverCmd{ArticleID: article.ID, MediaID: &spoofed.ID, ActorUserID: userID}); err == nil {
 		t.Fatal("set failed media as cover succeeded")
+	}
+
+	expiredPayload := tinyPNG(t)
+	expiredUpload, err := mediaSvc.RequestUpload(ctx, svcMedia.UploadRequest{Filename: "expired.png", ContentType: "image/png", SizeBytes: int64(len(expiredPayload)), UserID: userID})
+	if err != nil {
+		t.Fatalf("request expired upload: %v", err)
+	}
+	if err := putPresignedUpload(ctx, expiredUpload.UploadURL, expiredUpload.Headers, expiredPayload); err != nil {
+		t.Fatalf("upload expired object: %v", err)
+	}
+	expiredAt := time.Now().UTC().Add(-time.Minute)
+	if err := db.Model(&modelMedia.Asset{}).Where("id = ?", expiredUpload.ID).Update("upload_expires_at", expiredAt).Error; err != nil {
+		t.Fatalf("expire media upload: %v", err)
+	}
+	cleaned, err := mediaSvc.CleanupExpiredUploads(ctx, 10)
+	if err != nil {
+		t.Fatalf("cleanup expired uploads: %v", err)
+	}
+	if cleaned != 1 {
+		t.Fatalf("cleaned uploads = %d, want 1", cleaned)
+	}
+	if _, err := storage.OpenObject(ctx, expiredUpload.ObjectKey); err == nil {
+		t.Fatal("expired object still exists in S3")
+	}
+	var expiredAsset modelMedia.Asset
+	if err := db.Unscoped().First(&expiredAsset, expiredUpload.ID).Error; err != nil {
+		t.Fatalf("find cleaned media: %v", err)
+	}
+	if expiredAsset.Status != "deleted" || expiredAsset.DeletedAt == nil {
+		t.Fatalf("cleaned media = %#v", expiredAsset)
+	}
+
+	expiredCompletion, err := mediaSvc.RequestUpload(ctx, svcMedia.UploadRequest{Filename: "expired-completion.png", ContentType: "image/png", SizeBytes: int64(len(expiredPayload)), UserID: userID})
+	if err != nil {
+		t.Fatalf("request expired completion upload: %v", err)
+	}
+	if err := db.Model(&modelMedia.Asset{}).Where("id = ?", expiredCompletion.ID).Update("upload_expires_at", expiredAt).Error; err != nil {
+		t.Fatalf("expire completion upload: %v", err)
+	}
+	if err := mediaSvc.Complete(ctx, expiredCompletion.ID, userID); !errors.Is(err, svcMedia.ErrMediaUploadExpired) {
+		t.Fatalf("complete expired upload error = %v, want expired", err)
+	}
+	var expiredCompletionAsset modelMedia.Asset
+	if err := db.First(&expiredCompletionAsset, expiredCompletion.ID).Error; err != nil {
+		t.Fatalf("find expired completion media: %v", err)
+	}
+	if expiredCompletionAsset.Status != "expired" {
+		t.Fatalf("expired completion status = %q, want expired", expiredCompletionAsset.Status)
 	}
 }
 

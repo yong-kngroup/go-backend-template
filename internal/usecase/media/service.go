@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,8 @@ import (
 )
 
 const maxImageBytes int64 = 10 * 1024 * 1024
+
+const uploadCleanupLease = 5 * time.Minute
 
 var imageConstraints = imagevalidate.Constraints{
 	MaxBytes:            maxImageBytes,
@@ -130,7 +133,11 @@ func (s *Service) RequestUpload(ctx context.Context, r UploadRequest) (*UploadRe
 			return e
 		}
 		p, e = s.storage.PresignUpload(ctx, key, r.ContentType)
-		return e
+		if e != nil {
+			return e
+		}
+		a.UploadExpiresAt = &p.ExpiresAt
+		return s.repo.SetUploadExpiresAt(ctx, a.ID, p.ExpiresAt)
 	})
 	if err != nil {
 		return nil, err
@@ -148,6 +155,13 @@ func (s *Service) Complete(ctx context.Context, id, userID uint) error {
 	if a.UploaderUserID != userID || a.Status != "pending" {
 		return fmt.Errorf("media cannot be completed")
 	}
+	now := time.Now().UTC()
+	if a.UploadExpiresAt != nil && !a.UploadExpiresAt.After(now) {
+		if err := s.repo.MarkExpired(ctx, id, now); err != nil {
+			return err
+		}
+		return ErrMediaUploadExpired
+	}
 	info, err := s.storage.HeadObject(ctx, a.ObjectKey)
 	if err != nil {
 		return s.failValidation(ctx, id)
@@ -164,7 +178,45 @@ func (s *Service) Complete(ctx context.Context, id, userID uint) error {
 	if err != nil {
 		return s.failValidation(ctx, id)
 	}
-	return s.repo.MarkReady(ctx, id, metadata.ContentType, info.Size, metadata.Width, metadata.Height)
+	if err := s.repo.MarkReady(ctx, id, metadata.ContentType, info.Size, metadata.Width, metadata.Height, now); err != nil {
+		if errors.Is(err, shared.ErrNotFound) {
+			return ErrMediaUploadExpired
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *Service) CleanupExpiredUploads(ctx context.Context, batchSize int) (int, error) {
+	if s.storage == nil {
+		return 0, nil
+	}
+	now := time.Now().UTC()
+	assets, err := s.repo.ClaimExpired(ctx, now, now.Add(-uploadCleanupLease), batchSize)
+	if err != nil {
+		return 0, err
+	}
+	cleaned := 0
+	var firstErr error
+	for _, asset := range assets {
+		if err := s.storage.DeleteObject(ctx, asset.ObjectKey); err != nil {
+			if recordErr := s.repo.RecordCleanupFailure(ctx, asset.ID, err.Error()); recordErr != nil && firstErr == nil {
+				firstErr = recordErr
+			}
+			if firstErr == nil {
+				firstErr = fmt.Errorf("delete expired media object %d: %w", asset.ID, err)
+			}
+			continue
+		}
+		if err := s.repo.MarkDeleted(ctx, asset.ID, now); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		cleaned++
+	}
+	return cleaned, firstErr
 }
 
 func (s *Service) failValidation(ctx context.Context, id uint) error {

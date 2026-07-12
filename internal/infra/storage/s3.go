@@ -65,6 +65,11 @@ func (s *S3) OpenObject(ctx context.Context, key string) (io.ReadCloser, error) 
 	return out.Body, nil
 }
 
+func (s *S3) DeleteObject(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	return err
+}
+
 func (s *S3) ObjectKey(name string) string {
 	name = strings.TrimLeft(name, "/")
 	if s.prefix == "" {

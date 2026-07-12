@@ -71,6 +71,8 @@ cron:
   outbox_publish_interval_seconds: 5
   outbox_batch_size: 100
   verification_cleanup_interval_seconds: 300
+  media_upload_cleanup_interval_seconds: 300
+  media_upload_cleanup_batch_size: 100
   dlq_inspection_enabled: true
   dlq_inspection_interval_seconds: 60
   dlq_inspection_batch_size: 50
