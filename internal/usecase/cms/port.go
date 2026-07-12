@@ -24,6 +24,7 @@ type AdminService interface {
 	ArchiveTranslation(context.Context, ArchiveTranslationCmd) (*ArticleResult, error)
 	DeleteArticle(context.Context, DeleteArticleCmd) error
 	RestoreArticle(context.Context, RestoreArticleCmd) error
+	SetArticleCover(context.Context, SetArticleCoverCmd) error
 	ListCategories(context.Context, ListCategoriesCmd) ([]*CategoryTreeResult, error)
 	ReplaceArticleCategories(context.Context, ReplaceArticleCategoriesCmd) error
 	ReplaceArticleTags(context.Context, ReplaceArticleTagsCmd) error

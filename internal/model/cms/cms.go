@@ -43,6 +43,7 @@ func (CategoryTranslation) TableName() string { return "category_translations" }
 type Article struct {
 	ID           uint `gorm:"primaryKey"`
 	AuthorUserID uint
+	CoverMediaID *uint
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time

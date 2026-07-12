@@ -31,6 +31,7 @@ type Repository interface {
 	ListCategoryTreeItems(ctx context.Context, locale string) ([]*CategoryTreeItem, error)
 	CreateArticle(ctx context.Context, article *Article, translation *ArticleTranslation) error
 	FindArticle(ctx context.Context, id uint) (*Article, error)
+	SetArticleCover(ctx context.Context, articleID uint, mediaID *uint) error
 	FindArticleIncludingDeleted(ctx context.Context, id uint) (*Article, error)
 	SoftDeleteArticle(ctx context.Context, id uint, deletedAt time.Time) error
 	RestoreArticle(ctx context.Context, id uint) error

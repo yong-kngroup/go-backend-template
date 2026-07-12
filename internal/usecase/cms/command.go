@@ -106,6 +106,7 @@ type RestoreArticleCmd struct {
 	ActorUserID   uint
 	IP, UserAgent string
 }
+type SetArticleCoverCmd struct { ArticleID uint; MediaID *uint; ActorUserID uint; IP, UserAgent string }
 type CreateTagCmd struct {
 	Locale, Name, Slug string
 	ActorUserID        uint

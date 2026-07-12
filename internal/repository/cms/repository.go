@@ -259,6 +259,16 @@ func (r *Repository) CreateArticle(ctx context.Context, article *domainCMS.Artic
 func (r *Repository) FindArticle(ctx context.Context, id uint) (*domainCMS.Article, error) {
 	return r.findArticle(ctx, id, false)
 }
+func (r *Repository) SetArticleCover(ctx context.Context, articleID uint, mediaID *uint) error {
+	res := r.conn(ctx).Model(&modelCMS.Article{}).Where("id = ? AND deleted_at IS NULL", articleID).Update("cover_media_id", mediaID)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return shared.ErrNotFound
+	}
+	return nil
+}
 func (r *Repository) FindArticleIncludingDeleted(ctx context.Context, id uint) (*domainCMS.Article, error) {
 	return r.findArticle(ctx, id, true)
 }

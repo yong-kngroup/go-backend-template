@@ -33,6 +33,22 @@ type Service struct {
 	repo    *media.Repository
 	storage Storage
 }
+type ReadyMedia struct{ ID uint }
+
+func (s *Service) FindReady(ctx context.Context, id uint) (*ReadyMedia, error) {
+	a, err := s.repo.Find(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != "ready" {
+		return nil, fmt.Errorf("media is not ready")
+	}
+	return &ReadyMedia{ID: a.ID}, nil
+}
+func (s *Service) IsReady(ctx context.Context, id uint) (bool, error) {
+	_, err := s.FindReady(ctx, id)
+	return err == nil, err
+}
 
 func New(tx shared.TxManager, repo *media.Repository, storage Storage) *Service {
 	return &Service{tx: tx, repo: repo, storage: storage}

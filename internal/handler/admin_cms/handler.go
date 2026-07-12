@@ -41,6 +41,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	g.GET("/articles/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.GetArticleTranslation)
 	g.PUT("/articles/:id/categories", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.ReplaceArticleCategories)
 	g.PUT("/articles/:id/tags", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.ReplaceArticleTags)
+	g.PUT("/articles/:id/cover", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.SetArticleCover)
 	g.POST("/articles/:id/translations", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.CreateTranslation)
 	g.PUT("/articles/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.UpdateTranslation)
 	g.POST("/articles/:id/translations/:locale/publish", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.publish"), h.PublishTranslation)
@@ -100,6 +101,9 @@ type tagTranslationReq struct {
 }
 type replaceTagsReq struct {
 	TagIDs []uint `json:"tag_ids"`
+}
+type articleCoverReq struct {
+	MediaID *uint `json:"media_id"`
 }
 type articleReq struct {
 	Locale         string `json:"locale" binding:"required"`
@@ -363,6 +367,23 @@ func (h *Handler) ReplaceArticleTags(c *gin.Context) {
 		return
 	}
 	handler.OK(c, gin.H{"id": id, "tag_ids": req.TagIDs})
+}
+func (h *Handler) SetArticleCover(c *gin.Context) {
+	id, ok := idParam(c)
+	if !ok {
+		return
+	}
+	var req articleCoverReq
+	if c.ShouldBindJSON(&req) != nil {
+		invalid(c)
+		return
+	}
+	meta := handler.AuditMetaFromRequest(c)
+	if err := h.cms.SetArticleCover(c, svcCMS.SetArticleCoverCmd{ArticleID: id, MediaID: req.MediaID, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent}); err != nil {
+		fail(c, err)
+		return
+	}
+	handler.OK(c, gin.H{"id": id, "cover_media_id": req.MediaID})
 }
 func (h *Handler) CreateTranslation(c *gin.Context) {
 	id, ok := idParam(c)

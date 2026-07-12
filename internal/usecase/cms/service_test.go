@@ -94,6 +94,7 @@ func (*testRepo) CreateArticle(context.Context, *domainCMS.Article, *domainCMS.A
 func (*testRepo) FindArticle(_ context.Context, id uint) (*domainCMS.Article, error) {
 	return &domainCMS.Article{ID: id}, nil
 }
+func (*testRepo) SetArticleCover(context.Context, uint, *uint) error { return nil }
 func (r *testRepo) FindArticleIncludingDeleted(_ context.Context, id uint) (*domainCMS.Article, error) {
 	if r.article != nil {
 		return r.article, nil

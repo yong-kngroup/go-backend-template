@@ -14,10 +14,14 @@ import (
 )
 
 type Service struct {
-	tx       shared.TxManager
-	repo     domainCMS.Repository
-	now      func() time.Time
-	eventBus shared.EventBus
+	tx          shared.TxManager
+	repo        domainCMS.Repository
+	now         func() time.Time
+	eventBus    shared.EventBus
+	mediaFinder ReadyMediaFinder
+}
+type ReadyMediaFinder interface {
+	IsReady(context.Context, uint) (bool, error)
 }
 
 func New(tx shared.TxManager, repo domainCMS.Repository, eventBuses ...shared.EventBus) *Service {
@@ -27,6 +31,7 @@ func New(tx shared.TxManager, repo domainCMS.Repository, eventBuses ...shared.Ev
 	}
 	return service
 }
+func (s *Service) SetMediaFinder(f ReadyMediaFinder) { s.mediaFinder = f }
 
 func (s *Service) ListLocales(ctx context.Context) ([]*LocaleResult, error) {
 	locales, err := s.repo.ListLocales(ctx)
@@ -480,6 +485,29 @@ func (s *Service) RestoreArticle(ctx context.Context, cmd RestoreArticleCmd) err
 			return err
 		}
 		return s.publishAudit(ctx, cmd.ActorUserID, "article", cmd.ArticleID, domainAudit.ActionCMSArticleRestored, cmd.IP, cmd.UserAgent, map[string]any{"deleted_at": article.DeletedAt})
+	})
+}
+func (s *Service) SetArticleCover(ctx context.Context, cmd SetArticleCoverCmd) error {
+	if cmd.ArticleID == 0 {
+		return domainCMS.ErrInvalidInput
+	}
+	if _, err := s.repo.FindArticle(ctx, cmd.ArticleID); err != nil {
+		return mapArticle(err)
+	}
+	if cmd.MediaID != nil {
+		if s.mediaFinder == nil {
+			return fmt.Errorf("media service is not configured")
+		}
+		ok, err := s.mediaFinder.IsReady(ctx, *cmd.MediaID)
+		if err != nil || !ok {
+			return fmt.Errorf("media is not ready")
+		}
+	}
+	return s.tx.Do(ctx, func(ctx context.Context) error {
+		if err := s.repo.SetArticleCover(ctx, cmd.ArticleID, cmd.MediaID); err != nil {
+			return err
+		}
+		return s.publishAudit(ctx, cmd.ActorUserID, "article", cmd.ArticleID, domainAudit.ActionCMSArticleCoverChanged, cmd.IP, cmd.UserAgent, map[string]any{"cover_media_id": cmd.MediaID})
 	})
 }
 func (s *Service) ListCategories(ctx context.Context, cmd ListCategoriesCmd) ([]*CategoryTreeResult, error) {
