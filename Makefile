@@ -44,18 +44,18 @@ release-prepare:
 	$(GIT) pull --ff-only origin main
 
 release-check:
-	@test -n "$(VERSION)" || (echo "VERSION is required, for example: make release VERSION=0.1.0"; exit 1)
-	@test "$$($(GIT) branch --show-current)" = "main" || (echo "release must run from main"; exit 1)
-	@test -z "$$($(GIT) status --porcelain)" || (echo "worktree must be clean before release"; exit 1)
-	@if $(GIT) rev-parse -q --verify "refs/tags/template/v$(VERSION)" >/dev/null; then echo "tag template/v$(VERSION) already exists"; exit 1; fi
+	$(if $(strip $(VERSION)),,$(error VERSION is required, for example: make release VERSION=0.1.0))
+	$(if $(filter main,$(shell $(GIT) branch --show-current)),,$(error release must run from main))
+	$(if $(strip $(shell $(GIT) status --porcelain)),$(error worktree must be clean before release),)
+	$(if $(strip $(shell $(GIT) tag --list template/v$(VERSION))),$(error tag template/v$(VERSION) already exists),)
 
 release-tag: release-check
 	$(GIT) tag -a template/v$(VERSION) -m "Template v$(VERSION)"
 
 
 release-push:
-	@test -n "$(VERSION)" || (echo "VERSION is required, for example: make release-push VERSION=0.1.0"; exit 1)
-	@$(GIT) rev-parse -q --verify "refs/tags/template/v$(VERSION)" >/dev/null || (echo "tag template/v$(VERSION) does not exist"; exit 1)
+	$(if $(strip $(VERSION)),,$(error VERSION is required, for example: make release-push VERSION=0.1.0))
+	$(if $(strip $(shell $(GIT) tag --list template/v$(VERSION))),,$(error tag template/v$(VERSION) does not exist))
 	$(GIT) push origin template/v$(VERSION)
 
 release:
@@ -64,8 +64,8 @@ release:
 	$(MAKE) release-push VERSION=$(VERSION)
 
 project-branch:
-	@test -n "$(VERSION)" || (echo "VERSION is required, for example: make project-branch VERSION=0.1.0 PROJECT=example-service"; exit 1)
-	@test -n "$(PROJECT)" || (echo "PROJECT is required"; exit 1)
+	$(if $(strip $(VERSION)),,$(error VERSION is required, for example: make project-branch VERSION=0.1.0 PROJECT=example-service))
+	$(if $(strip $(PROJECT)),,$(error PROJECT is required))
 	$(GIT) switch -c project/$(PROJECT) template/v$(VERSION)
 
 ############################################################################
