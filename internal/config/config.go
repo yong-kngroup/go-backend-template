@@ -25,6 +25,17 @@ type Config struct {
 	Cron           CronConfig
 	Tracing        TracingConfig
 	BootstrapAdmin BootstrapAdminConfig `mapstructure:"bootstrap_admin"`
+	Storage        StorageConfig
+}
+type StorageConfig struct{ R2 R2Config }
+type R2Config struct {
+	AccountID         string `mapstructure:"account_id"`
+	AccessKeyID       string `mapstructure:"access_key_id"`
+	SecretAccessKey   string `mapstructure:"secret_access_key"`
+	Bucket            string
+	PublicBaseURL     string `mapstructure:"public_base_url"`
+	Prefix            string
+	PresignTTLMinutes int `mapstructure:"presign_ttl_minutes"`
 }
 
 type AuthConfig struct {
@@ -205,6 +216,8 @@ func Load(configPath string) *Config {
 	v.SetDefault("bootstrap_admin.name", "Admin")
 	v.SetDefault("bootstrap_admin.email", "")
 	v.SetDefault("bootstrap_admin.password", "12345678")
+	v.SetDefault("storage.r2.prefix", "cms")
+	v.SetDefault("storage.r2.presign_ttl_minutes", 15)
 
 	// load config file
 	if configPath == "" {
@@ -271,4 +284,5 @@ var configEnvBindings = map[string]string{
 	"cron.enabled": "CRON_ENABLED", "cron.probe.ip": "CRON_PROBE_IP", "cron.probe.port": "CRON_PROBE_PORT", "cron.outbox_publish_interval_seconds": "CRON_OUTBOX_PUBLISH_INTERVAL_SECONDS", "cron.outbox_batch_size": "CRON_OUTBOX_BATCH_SIZE", "cron.verification_cleanup_interval_seconds": "CRON_VERIFICATION_CLEANUP_INTERVAL_SECONDS",
 	"tracing.endpoint":        "TRACING_ENDPOINT",
 	"bootstrap_admin.enabled": "BOOTSTRAP_ADMIN_ENABLED", "bootstrap_admin.name": "BOOTSTRAP_ADMIN_NAME", "bootstrap_admin.email": "BOOTSTRAP_ADMIN_EMAIL", "bootstrap_admin.password": "BOOTSTRAP_ADMIN_PASSWORD",
+	"storage.r2.account_id": "STORAGE_R2_ACCOUNT_ID", "storage.r2.access_key_id": "STORAGE_R2_ACCESS_KEY_ID", "storage.r2.secret_access_key": "STORAGE_R2_SECRET_ACCESS_KEY", "storage.r2.bucket": "STORAGE_R2_BUCKET", "storage.r2.public_base_url": "STORAGE_R2_PUBLIC_BASE_URL", "storage.r2.prefix": "STORAGE_R2_PREFIX", "storage.r2.presign_ttl_minutes": "STORAGE_R2_PRESIGN_TTL_MINUTES",
 }

@@ -86,3 +86,13 @@ bootstrap_admin:
   name: "Admin"
   email: ""
   password: ""
+
+storage:
+  r2:
+    account_id: ""
+    access_key_id: ""
+    secret_access_key: ""
+    bucket: ""
+    public_base_url: ""
+    prefix: "cms"
+    presign_ttl_minutes: 15
