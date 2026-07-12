@@ -7,6 +7,8 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	model "github.com/freeDog-wy/go-backend-template/internal/model/media"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"time"
 )
 
 type Repository struct{ db *gorm.DB }
@@ -37,4 +39,19 @@ func (r *Repository) MarkReady(ctx context.Context, id uint, mime string, size i
 }
 func (r *Repository) MarkFailed(ctx context.Context, id uint) error {
 	return database.DB(ctx, r.db).Model(&model.Asset{}).Where("id = ?", id).Update("status", "failed").Error
+}
+func (r *Repository) List(ctx context.Context, limit, offset int) ([]model.Asset, int64, error) {
+	var total int64
+	db := database.DB(ctx, r.db).Model(&model.Asset{}).Where("deleted_at IS NULL")
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var assets []model.Asset
+	if err := db.Order("created_at DESC").Limit(limit).Offset(offset).Find(&assets).Error; err != nil {
+		return nil, 0, err
+	}
+	return assets, total, nil
+}
+func (r *Repository) UpsertTranslation(ctx context.Context, t *model.Translation) error {
+	return database.DB(ctx, r.db).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "media_id"}, {Name: "locale"}}, DoUpdates: clause.Assignments(map[string]any{"alt_text": t.AltText, "title": t.Title, "updated_at": time.Now()})}).Create(t).Error
 }

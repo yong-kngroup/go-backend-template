@@ -16,6 +16,7 @@ import (
 
 type R2 struct {
 	bucket, prefix string
+	publicBaseURL  string
 	client         *s3.Client
 	presigner      *s3.PresignClient
 	ttl            time.Duration
@@ -34,7 +35,7 @@ func NewR2(ctx context.Context, cfg appConfig.R2Config) (*R2, error) {
 	if ttl <= 0 {
 		ttl = 15 * time.Minute
 	}
-	return &R2{bucket: cfg.Bucket, prefix: strings.Trim(cfg.Prefix, "/"), client: client, presigner: s3.NewPresignClient(client), ttl: ttl}, nil
+	return &R2{bucket: cfg.Bucket, prefix: strings.Trim(cfg.Prefix, "/"), publicBaseURL: strings.TrimRight(cfg.PublicBaseURL, "/"), client: client, presigner: s3.NewPresignClient(client), ttl: ttl}, nil
 }
 
 func (r *R2) HeadObject(ctx context.Context, key string) (*usecaseMedia.ObjectInfo, error) {
@@ -50,6 +51,12 @@ func (r *R2) ObjectKey(name string) string {
 		return name
 	}
 	return r.prefix + "/" + name
+}
+func (r *R2) PublicURL(key string) string {
+	if r.publicBaseURL == "" {
+		return ""
+	}
+	return r.publicBaseURL + "/" + strings.TrimLeft(key, "/")
 }
 func (r *R2) PresignUpload(ctx context.Context, key, contentType string) (*usecaseMedia.PresignedUpload, error) {
 	request, err := r.presigner.PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(r.bucket), Key: aws.String(key), ContentType: aws.String(contentType)}, s3.WithPresignExpires(r.ttl))

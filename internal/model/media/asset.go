@@ -13,3 +13,12 @@ type Asset struct {
 }
 
 func (Asset) TableName() string { return "media_assets" }
+
+type Translation struct {
+	ID                     uint `gorm:"primaryKey"`
+	MediaID                uint
+	Locale, AltText, Title string
+	CreatedAt, UpdatedAt   time.Time
+}
+
+func (Translation) TableName() string { return "media_translations" }

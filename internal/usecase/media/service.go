@@ -51,6 +51,36 @@ type UploadResult struct {
 	ExpiresAt time.Time         `json:"expires_at"`
 	Status    string            `json:"status"`
 }
+type MediaResult struct {
+	ID                                            uint `json:"id"`
+	ObjectKey, OriginalFilename, MimeType, Status string
+	SizeBytes                                     int64     `json:"size_bytes"`
+	CreatedAt                                     time.Time `json:"created_at"`
+}
+
+func (s *Service) List(ctx context.Context, page, perPage int) ([]MediaResult, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 20
+	}
+	items, total, err := s.repo.List(ctx, perPage, (page-1)*perPage)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]MediaResult, 0, len(items))
+	for _, a := range items {
+		out = append(out, MediaResult{ID: a.ID, ObjectKey: a.ObjectKey, OriginalFilename: a.OriginalFilename, MimeType: a.MimeType, Status: a.Status, SizeBytes: a.SizeBytes, CreatedAt: a.CreatedAt})
+	}
+	return out, total, nil
+}
+func (s *Service) UpsertTranslation(ctx context.Context, id uint, locale, alt, title string) error {
+	if _, err := s.repo.Find(ctx, id); err != nil {
+		return err
+	}
+	return s.repo.UpsertTranslation(ctx, &model.Translation{MediaID: id, Locale: locale, AltText: alt, Title: title})
+}
 
 func (s *Service) RequestUpload(ctx context.Context, r UploadRequest) (*UploadResult, error) {
 	if s.storage == nil {
