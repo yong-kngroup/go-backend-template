@@ -8,6 +8,7 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 	"github.com/freeDog-wy/go-backend-template/internal/handler"
+	HdlAdminCMS "github.com/freeDog-wy/go-backend-template/internal/handler/admin_cms"
 	HdlAdminRole "github.com/freeDog-wy/go-backend-template/internal/handler/admin_role"
 	HdlAdminUser "github.com/freeDog-wy/go-backend-template/internal/handler/admin_user"
 	HdlAuth "github.com/freeDog-wy/go-backend-template/internal/handler/auth"
@@ -15,6 +16,7 @@ import (
 	HdlHealth "github.com/freeDog-wy/go-backend-template/internal/handler/health"
 	HdlMe "github.com/freeDog-wy/go-backend-template/internal/handler/me"
 	"github.com/freeDog-wy/go-backend-template/internal/handler/middleware"
+	HdlPublicContent "github.com/freeDog-wy/go-backend-template/internal/handler/public_content"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/cache"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/crypto"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
@@ -24,12 +26,14 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
 	RepoAuth "github.com/freeDog-wy/go-backend-template/internal/repository/auth"
 	RepoAuthorization "github.com/freeDog-wy/go-backend-template/internal/repository/authorization"
+	RepoCMS "github.com/freeDog-wy/go-backend-template/internal/repository/cms"
 	RepoIdentity "github.com/freeDog-wy/go-backend-template/internal/repository/identity"
 	RepoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	RepoVerification "github.com/freeDog-wy/go-backend-template/internal/repository/verification"
 	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
 	SvcAuthorization "github.com/freeDog-wy/go-backend-template/internal/usecase/authorization"
 	SvcBootstrap "github.com/freeDog-wy/go-backend-template/internal/usecase/bootstrap"
+	SvcCMS "github.com/freeDog-wy/go-backend-template/internal/usecase/cms"
 	SvcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
 	SvcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/captcha"
@@ -88,6 +92,7 @@ func initApp(cfg *config.Config) *App {
 	userRepo := RepoIdentity.New(db)
 	outboxRepo := RepoOutbox.New(db)
 	verifyRepo := RepoVerification.New(db)
+	cmsRepo := RepoCMS.New(db)
 
 	pwdHasher := crypto.NewBcryptHasher(0)
 	eventBus := InfraOutbox.NewEventBus(outboxRepo)
@@ -112,6 +117,7 @@ func initApp(cfg *config.Config) *App {
 		time.Duration(cfg.Auth.AccessTokenTTLMinutes)*time.Minute,
 		time.Duration(cfg.Auth.RefreshTokenTTLHours)*time.Hour,
 	)
+	cmsSvc := SvcCMS.New(txManager, cmsRepo)
 	if err := bootstrapSvc.BootstrapAdmin(context.Background(), SvcBootstrap.BootstrapAdminCmd{
 		Enabled:  cfg.BootstrapAdmin.Enabled,
 		Name:     cfg.BootstrapAdmin.Name,
@@ -132,6 +138,8 @@ func initApp(cfg *config.Config) *App {
 	adminRoleHdl := HdlAdminRole.New(authSvc, authorizationSvc, authorizationSvc)
 	adminUserHdl := HdlAdminUser.New(authSvc, authorizationSvc, authorizationSvc, identitySvc)
 	meHdl := HdlMe.New(authSvc, authSvc, identitySvc)
+	adminCMSHdl := HdlAdminCMS.New(authSvc, authorizationSvc, cmsSvc)
+	publicContentHdl := HdlPublicContent.New(cmsSvc)
 
 	registry := handler.NewRegistry()
 	registry.Add(healthHdl)
@@ -140,6 +148,8 @@ func initApp(cfg *config.Config) *App {
 	registry.Add(adminRoleHdl)
 	registry.Add(adminUserHdl)
 	registry.Add(meHdl)
+	registry.Add(adminCMSHdl)
+	registry.Add(publicContentHdl)
 
 	if cfg.App.Mode == "production" {
 		gin.SetMode(gin.ReleaseMode)

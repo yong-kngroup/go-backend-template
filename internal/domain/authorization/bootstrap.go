@@ -15,6 +15,11 @@ var defaultPermissionDefinitions = []permissionDefinition{
 	{code: "role.read", name: "Read Roles", description: "View role definitions"},
 	{code: "role.write", name: "Write Roles", description: "Create and update roles"},
 	{code: "permission.read", name: "Read Permissions", description: "View permission definitions"},
+	{code: "cms.article.create", name: "Create CMS Articles", description: "Create CMS articles"},
+	{code: "cms.article.update", name: "Update CMS Articles", description: "Edit CMS articles and translations"},
+	{code: "cms.article.publish", name: "Publish CMS Articles", description: "Publish CMS article translations"},
+	{code: "cms.article.archive", name: "Archive CMS Articles", description: "Archive CMS article translations"},
+	{code: "cms.category.manage", name: "Manage CMS Categories", description: "Manage CMS category hierarchy"},
 }
 
 func NewSuperAdminRole() (*Role, error) {
