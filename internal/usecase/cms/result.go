@@ -56,18 +56,25 @@ type ArticleCategoryResult struct {
 	IsPrimary  bool `json:"is_primary"`
 }
 type PublicArticleResult struct {
-	ID             uint       `json:"id"`
-	Locale         string     `json:"locale"`
-	Title          string     `json:"title"`
-	Slug           string     `json:"slug"`
-	Summary        string     `json:"summary"`
-	Content        string     `json:"content"`
-	ContentFormat  string     `json:"content_format"`
-	PublishedAt    *time.Time `json:"published_at"`
-	SEOTitle       string     `json:"seo_title"`
-	SEODescription string     `json:"seo_description"`
-	CanonicalURL   string     `json:"canonical_url"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID               uint                `json:"id"`
+	Locale           string              `json:"locale"`
+	Title            string              `json:"title"`
+	Slug             string              `json:"slug"`
+	Summary          string              `json:"summary"`
+	Content          string              `json:"content"`
+	ContentFormat    string              `json:"content_format"`
+	PublishedAt      *time.Time          `json:"published_at"`
+	SEOTitle         string              `json:"seo_title"`
+	SEODescription   string              `json:"seo_description"`
+	CanonicalURL     string              `json:"canonical_url"`
+	UpdatedAt        time.Time           `json:"updated_at"`
+	AvailableLocales []PublicLocaleRef   `json:"available_locales"`
+	PrimaryCategory  *PublicCategoryRef  `json:"primary_category,omitempty"`
+	Breadcrumbs      []PublicCategoryRef `json:"breadcrumbs"`
+}
+type PublicLocaleRef struct {
+	Locale string `json:"locale"`
+	Slug   string `json:"slug"`
 }
 type PublicArticleListResult struct {
 	ID              uint               `json:"id"`
@@ -84,4 +91,8 @@ type PublicCategoryRef struct {
 	ID   uint   `json:"id"`
 	Name string `json:"name"`
 	Slug string `json:"slug"`
+}
+type SitemapEntryResult struct {
+	URL          string    `json:"url"`
+	LastModified time.Time `json:"last_modified"`
 }

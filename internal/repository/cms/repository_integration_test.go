@@ -79,8 +79,21 @@ func TestRepositoryIntegrationCMSConstraintsAndPublicVisibility(t *testing.T) {
 	if err := repo.UpsertCategoryTranslation(ctx, &domainCMS.CategoryTranslation{CategoryID: category.ID, Locale: "en-US", Name: "Root", Slug: "root", Description: "English root"}); err != nil {
 		t.Fatalf("upsert category translation: %v", err)
 	}
+	enTranslation := &domainCMS.ArticleTranslation{ArticleID: article2.ID, Locale: "en-US", Title: "Published", Slug: "published", ContentFormat: "markdown", Status: domainCMS.TranslationPublished, PublishedAt: &now}
+	if err := repo.CreateArticleTranslation(ctx, enTranslation); err != nil {
+		t.Fatalf("create english translation: %v", err)
+	}
 	if categories, err := repo.ListCategoryTreeItems(ctx, "en-US"); err != nil || len(categories) != 1 || categories[0].Name != "Root" {
 		t.Fatalf("english categories = %#v, %v", categories, err)
+	}
+	if locales, err := repo.ListPublishedArticleLocales(ctx, article2.ID); err != nil || len(locales) != 2 {
+		t.Fatalf("published locales = %#v, %v", locales, err)
+	}
+	if breadcrumbs, err := repo.ListPublicArticleBreadcrumbs(ctx, article2.ID, "zh-CN"); err != nil || len(breadcrumbs) != 1 || breadcrumbs[0].Slug != "root" {
+		t.Fatalf("breadcrumbs = %#v, %v", breadcrumbs, err)
+	}
+	if entries, total, err := repo.ListPublicSitemapEntries(ctx, "zh-CN", shared.NewPageQuery(1, 20)); err != nil || total < 2 || len(entries) < 2 {
+		t.Fatalf("sitemap entries = %#v, total=%d, err=%v", entries, total, err)
 	}
 	publicArticles, total, err := repo.ListPublicArticles(ctx, "zh-CN", nil, shared.NewPageQuery(1, 20))
 	if err != nil || total != 1 || len(publicArticles) != 1 || publicArticles[0].Article.ID != article2.ID {

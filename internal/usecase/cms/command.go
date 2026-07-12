@@ -58,6 +58,10 @@ type ListPublicCategoryArticlesCmd struct {
 	CategorySlug string
 	Page         shared.PageQuery
 }
+type ListPublicSitemapEntriesCmd struct {
+	Locale string
+	Page   shared.PageQuery
+}
 type CreateLocaleCmd struct {
 	Code, Name    string
 	SortOrder     int

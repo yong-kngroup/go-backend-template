@@ -92,3 +92,13 @@ type PublicArticleListItem struct {
 	PrimaryCategoryName string
 	PrimaryCategorySlug string
 }
+
+type PublishedLocale struct {
+	Locale string
+	Slug   string
+}
+type SitemapEntry struct {
+	Kind      string
+	Slug      string
+	UpdatedAt time.Time
+}

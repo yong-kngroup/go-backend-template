@@ -15,6 +15,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/v1/public/:locale/categories", h.ListCategories)
 	r.GET("/api/v1/public/:locale/articles", h.ListArticles)
 	r.GET("/api/v1/public/:locale/categories/:slug/articles", h.ListCategoryArticles)
+	r.GET("/api/v1/public/:locale/sitemap-entries", h.ListSitemapEntries)
 	r.GET("/api/v1/public/:locale/articles/:slug", h.GetArticle)
 }
 func (h *Handler) ListCategories(c *gin.Context) {
@@ -50,6 +51,19 @@ func (h *Handler) ListCategoryArticles(c *gin.Context) {
 		return
 	}
 	handler.OKPage(c, results, handler.MetaFromPageResult(page))
+}
+func (h *Handler) ListSitemapEntries(c *gin.Context) {
+	var query handler.PageQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		handler.Fail(c, "INVALID_INPUT", "invalid page query")
+		return
+	}
+	entries, page, err := h.content.ListPublicSitemapEntries(c, svcCMS.ListPublicSitemapEntriesCmd{Locale: c.Param("locale"), Page: query.ToDomain()})
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	handler.OKPage(c, entries, handler.MetaFromPageResult(page))
 }
 func (h *Handler) GetArticle(c *gin.Context) {
 	article, err := h.content.GetPublishedArticle(c, c.Param("locale"), c.Param("slug"))

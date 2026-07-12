@@ -3,6 +3,7 @@ package cms
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	domainAudit "github.com/freeDog-wy/go-backend-template/internal/domain/audit"
@@ -410,6 +411,9 @@ func (s *Service) GetArticleTranslation(ctx context.Context, cmd GetArticleTrans
 	return result, nil
 }
 func (s *Service) GetPublishedArticle(ctx context.Context, locale, slug string) (*PublicArticleResult, error) {
+	if err := s.requireLocale(ctx, locale); err != nil {
+		return nil, err
+	}
 	a, err := s.repo.FindPublicArticle(ctx, locale, slug)
 	if err != nil {
 		if errors.Is(err, shared.ErrNotFound) {
@@ -417,7 +421,50 @@ func (s *Service) GetPublishedArticle(ctx context.Context, locale, slug string) 
 		}
 		return nil, err
 	}
-	return &PublicArticleResult{ID: a.Article.ID, Locale: a.Locale, Title: a.Title, Slug: a.Slug, Summary: a.Summary, Content: a.Content, ContentFormat: a.ContentFormat, PublishedAt: a.PublishedAt, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CanonicalURL: a.CanonicalURL, UpdatedAt: a.ArticleTranslation.UpdatedAt}, nil
+	locales, err := s.repo.ListPublishedArticleLocales(ctx, a.Article.ID)
+	if err != nil {
+		return nil, err
+	}
+	breadcrumbs, err := s.repo.ListPublicArticleBreadcrumbs(ctx, a.Article.ID, locale)
+	if err != nil {
+		return nil, err
+	}
+	result := &PublicArticleResult{ID: a.Article.ID, Locale: a.Locale, Title: a.Title, Slug: a.Slug, Summary: a.Summary, Content: a.Content, ContentFormat: a.ContentFormat, PublishedAt: a.PublishedAt, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CanonicalURL: a.CanonicalURL, UpdatedAt: a.ArticleTranslation.UpdatedAt, AvailableLocales: make([]PublicLocaleRef, 0, len(locales)), Breadcrumbs: make([]PublicCategoryRef, 0, len(breadcrumbs))}
+	for _, translation := range locales {
+		result.AvailableLocales = append(result.AvailableLocales, PublicLocaleRef{Locale: translation.Locale, Slug: translation.Slug})
+	}
+	for index, category := range breadcrumbs {
+		ref := PublicCategoryRef{ID: category.ID, Name: category.Name, Slug: category.Slug}
+		result.Breadcrumbs = append(result.Breadcrumbs, ref)
+		if index == len(breadcrumbs)-1 {
+			result.PrimaryCategory = &ref
+		}
+	}
+	return result, nil
+}
+func (s *Service) ListPublicSitemapEntries(ctx context.Context, cmd ListPublicSitemapEntriesCmd) ([]*SitemapEntryResult, shared.PageResult, error) {
+	if err := s.requireLocale(ctx, cmd.Locale); err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	page := shared.NewPageQuery(cmd.Page.Page, cmd.Page.PerPage)
+	entries, total, err := s.repo.ListPublicSitemapEntries(ctx, cmd.Locale, page)
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	results := make([]*SitemapEntryResult, 0, len(entries))
+	for _, entry := range entries {
+		var path string
+		switch entry.Kind {
+		case "article":
+			path = fmt.Sprintf("/%s/articles/%s", cmd.Locale, entry.Slug)
+		case "category":
+			path = fmt.Sprintf("/%s/categories/%s", cmd.Locale, entry.Slug)
+		default:
+			continue
+		}
+		results = append(results, &SitemapEntryResult{URL: path, LastModified: entry.UpdatedAt})
+	}
+	return results, shared.PageResult{Page: page.Page, PerPage: page.PerPage, Total: total}, nil
 }
 func (s *Service) ListPublishedArticles(ctx context.Context, cmd ListPublicArticlesCmd) ([]*PublicArticleListResult, shared.PageResult, error) {
 	return s.listPublishedArticles(ctx, cmd.Locale, nil, cmd.Page)

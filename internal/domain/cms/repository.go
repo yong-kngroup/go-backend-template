@@ -35,6 +35,9 @@ type Repository interface {
 	ReplaceArticleCategories(ctx context.Context, articleID uint, categoryIDs []uint, primaryCategoryID *uint) error
 	ListArticleTranslations(ctx context.Context, locale string, includeDeleted bool, page shared.PageQuery) ([]*ArticleListItem, int64, error)
 	FindPublicArticle(ctx context.Context, locale, slug string) (*PublicArticle, error)
+	ListPublishedArticleLocales(ctx context.Context, articleID uint) ([]PublishedLocale, error)
+	ListPublicArticleBreadcrumbs(ctx context.Context, articleID uint, locale string) ([]CategoryTreeItem, error)
+	ListPublicSitemapEntries(ctx context.Context, locale string, page shared.PageQuery) ([]SitemapEntry, int64, error)
 	ListPublicCategoryTreeItems(ctx context.Context, locale string) ([]*CategoryTreeItem, error)
 	PublicCategoryExists(ctx context.Context, locale, slug string) (bool, error)
 	ListPublicArticles(ctx context.Context, locale string, categorySlug *string, page shared.PageQuery) ([]*PublicArticleListItem, int64, error)

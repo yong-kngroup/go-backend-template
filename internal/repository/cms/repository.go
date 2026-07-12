@@ -338,6 +338,83 @@ func (r *Repository) FindPublicArticle(ctx context.Context, locale, slug string)
 	return &domainCMS.PublicArticle{Article: domainCMS.Article{ID: article.ID, AuthorUserID: article.AuthorUserID, CreatedAt: article.CreatedAt, UpdatedAt: article.UpdatedAt, DeletedAt: article.DeletedAt}, ArticleTranslation: *tr}, nil
 }
 
+func (r *Repository) ListPublishedArticleLocales(ctx context.Context, articleID uint) ([]domainCMS.PublishedLocale, error) {
+	type row struct{ Locale, Slug string }
+	var rows []row
+	err := r.conn(ctx).Table("article_translations").Joins("JOIN locales ON locales.code = article_translations.locale").Where("article_translations.article_id = ? AND article_translations.status = 'published' AND article_translations.published_at <= NOW() AND locales.is_enabled", articleID).Order("locales.sort_order, article_translations.locale").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domainCMS.PublishedLocale, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, domainCMS.PublishedLocale{Locale: row.Locale, Slug: row.Slug})
+	}
+	return result, nil
+}
+
+func (r *Repository) ListPublicArticleBreadcrumbs(ctx context.Context, articleID uint, locale string) ([]domainCMS.CategoryTreeItem, error) {
+	type row struct {
+		CategoryID              uint
+		ParentID                *uint
+		SortOrder               int
+		Name, Slug, Description string
+	}
+	var rows []row
+	err := r.conn(ctx).Raw(`WITH RECURSIVE path AS (
+  SELECT c.id, c.parent_id, c.sort_order, 1 AS depth
+  FROM article_categories ac JOIN categories c ON c.id = ac.category_id
+  WHERE ac.article_id = ? AND ac.is_primary AND c.is_enabled
+  UNION ALL
+  SELECT parent.id, parent.parent_id, parent.sort_order, path.depth + 1
+  FROM categories parent JOIN path ON path.parent_id = parent.id
+  WHERE parent.is_enabled
+)
+SELECT path.id AS category_id, path.parent_id, path.sort_order, ct.name, ct.slug, ct.description
+FROM path JOIN category_translations ct ON ct.category_id = path.id AND ct.locale = ?
+ORDER BY path.depth DESC`, articleID, locale).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domainCMS.CategoryTreeItem, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, domainCMS.CategoryTreeItem{Category: domainCMS.Category{ID: row.CategoryID, ParentID: row.ParentID, SortOrder: row.SortOrder, Enabled: true}, CategoryTranslation: domainCMS.CategoryTranslation{CategoryID: row.CategoryID, Locale: locale, Name: row.Name, Slug: row.Slug, Description: row.Description}})
+	}
+	return result, nil
+}
+
+func (r *Repository) ListPublicSitemapEntries(ctx context.Context, locale string, page shared.PageQuery) ([]domainCMS.SitemapEntry, int64, error) {
+	base := `
+SELECT 'article' AS kind, article_translations.slug, article_translations.updated_at
+FROM article_translations
+JOIN articles ON articles.id = article_translations.article_id
+JOIN locales ON locales.code = article_translations.locale
+WHERE article_translations.locale = ? AND article_translations.status = 'published' AND article_translations.published_at <= NOW() AND articles.deleted_at IS NULL AND locales.is_enabled
+UNION ALL
+SELECT 'category' AS kind, category_translations.slug, category_translations.updated_at
+FROM category_translations
+JOIN categories ON categories.id = category_translations.category_id
+JOIN locales ON locales.code = category_translations.locale
+WHERE category_translations.locale = ? AND categories.is_enabled AND locales.is_enabled`
+	var total int64
+	if err := r.conn(ctx).Raw("SELECT COUNT(*) FROM ("+base+") AS sitemap_entries", locale, locale).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	type row struct {
+		Kind, Slug string
+		UpdatedAt  time.Time
+	}
+	var rows []row
+	query := "SELECT kind, slug, updated_at FROM (" + base + ") AS sitemap_entries ORDER BY updated_at DESC, kind, slug LIMIT ? OFFSET ?"
+	if err := r.conn(ctx).Raw(query, locale, locale, page.PerPage, page.Offset()).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]domainCMS.SitemapEntry, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, domainCMS.SitemapEntry{Kind: row.Kind, Slug: row.Slug, UpdatedAt: row.UpdatedAt})
+	}
+	return result, total, nil
+}
+
 func (r *Repository) PublicCategoryExists(ctx context.Context, locale, slug string) (bool, error) {
 	var count int64
 	err := r.conn(ctx).Table("categories").Joins("JOIN category_translations ON category_translations.category_id = categories.id").Where("categories.is_enabled AND category_translations.locale = ? AND category_translations.slug = ?", locale, slug).Count(&count).Error

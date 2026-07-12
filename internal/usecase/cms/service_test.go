@@ -114,6 +114,15 @@ func (r *testRepo) FindPublicArticle(context.Context, string, string) (*domainCM
 	}
 	return r.public, nil
 }
+func (*testRepo) ListPublishedArticleLocales(context.Context, uint) ([]domainCMS.PublishedLocale, error) {
+	return nil, nil
+}
+func (*testRepo) ListPublicArticleBreadcrumbs(context.Context, uint, string) ([]domainCMS.CategoryTreeItem, error) {
+	return nil, nil
+}
+func (*testRepo) ListPublicSitemapEntries(context.Context, string, shared.PageQuery) ([]domainCMS.SitemapEntry, int64, error) {
+	return nil, 0, nil
+}
 func (r *testRepo) ListPublicCategoryTreeItems(context.Context, string) ([]*domainCMS.CategoryTreeItem, error) {
 	return r.tree, nil
 }
