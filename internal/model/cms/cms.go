@@ -88,3 +88,30 @@ type URLRedirect struct {
 }
 
 func (URLRedirect) TableName() string { return "url_redirects" }
+
+type Tag struct {
+	ID        uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (Tag) TableName() string { return "tags" }
+
+type TagTranslation struct {
+	ID        uint `gorm:"primaryKey"`
+	TagID     uint
+	Locale    string
+	Name      string
+	Slug      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (TagTranslation) TableName() string { return "tag_translations" }
+
+type ArticleTag struct {
+	ArticleID uint `gorm:"primaryKey"`
+	TagID     uint `gorm:"primaryKey"`
+}
+
+func (ArticleTag) TableName() string { return "article_tags" }

@@ -15,6 +15,11 @@ type Repository interface {
 	UpdateLocale(ctx context.Context, locale *Locale) error
 	SetDefaultLocale(ctx context.Context, code string) error
 	CountEnabledLocales(ctx context.Context) (int64, error)
+	CreateTag(ctx context.Context, tag *Tag, translation *TagTranslation) error
+	FindTag(ctx context.Context, id uint) (*Tag, error)
+	FindTagTranslation(ctx context.Context, tagID uint, locale string) (*TagTranslation, error)
+	UpsertTagTranslation(ctx context.Context, translation *TagTranslation) error
+	ListTags(ctx context.Context, locale string, page shared.PageQuery) ([]*TagListItem, int64, error)
 	CreateCategory(ctx context.Context, category *Category, translation *CategoryTranslation) error
 	UpsertCategoryTranslation(ctx context.Context, translation *CategoryTranslation) error
 	FindCategoryTranslation(ctx context.Context, categoryID uint, locale string) (*CategoryTranslation, error)
@@ -35,6 +40,8 @@ type Repository interface {
 	SaveURLRedirect(ctx context.Context, redirect *URLRedirect) error
 	FindURLRedirect(ctx context.Context, locale, sourcePath string) (*URLRedirect, error)
 	ListArticleCategories(ctx context.Context, articleID uint) ([]ArticleCategory, error)
+	ListArticleTags(ctx context.Context, articleID uint, locale string) ([]*TagListItem, error)
+	ReplaceArticleTags(ctx context.Context, articleID uint, tagIDs []uint) error
 	SaveArticleTranslation(ctx context.Context, translation *ArticleTranslation) error
 	ReplaceArticleCategories(ctx context.Context, articleID uint, categoryIDs []uint, primaryCategoryID *uint) error
 	ListArticleTranslations(ctx context.Context, locale string, includeDeleted bool, page shared.PageQuery) ([]*ArticleListItem, int64, error)
@@ -45,4 +52,6 @@ type Repository interface {
 	ListPublicCategoryTreeItems(ctx context.Context, locale string) ([]*CategoryTreeItem, error)
 	PublicCategoryExists(ctx context.Context, locale, slug string) (bool, error)
 	ListPublicArticles(ctx context.Context, locale string, categorySlug *string, page shared.PageQuery) ([]*PublicArticleListItem, int64, error)
+	PublicTagExists(ctx context.Context, locale, slug string) (bool, error)
+	ListPublicTagArticles(ctx context.Context, locale, tagSlug string, page shared.PageQuery) ([]*PublicArticleListItem, int64, error)
 }

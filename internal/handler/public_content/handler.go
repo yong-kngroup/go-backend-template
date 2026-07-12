@@ -15,6 +15,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/v1/public/:locale/categories", h.ListCategories)
 	r.GET("/api/v1/public/:locale/articles", h.ListArticles)
 	r.GET("/api/v1/public/:locale/categories/:slug/articles", h.ListCategoryArticles)
+	r.GET("/api/v1/public/:locale/tags/:slug/articles", h.ListTagArticles)
 	r.GET("/api/v1/public/:locale/sitemap-entries", h.ListSitemapEntries)
 	r.GET("/api/v1/public/:locale/redirects", h.ResolveRedirect)
 	r.GET("/api/v1/public/:locale/articles/:slug", h.GetArticle)
@@ -52,6 +53,19 @@ func (h *Handler) ListCategoryArticles(c *gin.Context) {
 		return
 	}
 	handler.OKPage(c, results, handler.MetaFromPageResult(page))
+}
+func (h *Handler) ListTagArticles(c *gin.Context) {
+	var q handler.PageQuery
+	if c.ShouldBindQuery(&q) != nil {
+		handler.Fail(c, "INVALID_INPUT", "invalid page query")
+		return
+	}
+	r, p, e := h.content.ListPublishedTagArticles(c, svcCMS.ListPublicTagArticlesCmd{Locale: c.Param("locale"), TagSlug: c.Param("slug"), Page: q.ToDomain()})
+	if e != nil {
+		fail(c, e)
+		return
+	}
+	handler.OKPage(c, r, handler.MetaFromPageResult(p))
 }
 func (h *Handler) ListSitemapEntries(c *gin.Context) {
 	var query handler.PageQuery
@@ -94,6 +108,8 @@ func fail(c *gin.Context, err error) {
 		handler.Fail(c, "INVALID_INPUT", "invalid public content query")
 	case errors.Is(err, domainCMS.ErrRedirectNotFound):
 		handler.Fail(c, "REDIRECT_NOT_FOUND", "redirect not found")
+	case errors.Is(err, domainCMS.ErrTagNotFound):
+		handler.Fail(c, "TAG_NOT_FOUND", "published tag not found")
 	default:
 		handler.Fail(c, "INTERNAL_ERROR", err.Error())
 	}

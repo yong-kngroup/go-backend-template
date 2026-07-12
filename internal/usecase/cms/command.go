@@ -106,3 +106,28 @@ type RestoreArticleCmd struct {
 	ActorUserID   uint
 	IP, UserAgent string
 }
+type CreateTagCmd struct {
+	Locale, Name, Slug string
+	ActorUserID        uint
+	IP, UserAgent      string
+}
+type UpsertTagTranslationCmd struct {
+	TagID              uint
+	Locale, Name, Slug string
+	ActorUserID        uint
+	IP, UserAgent      string
+}
+type ListTagsCmd struct {
+	Locale string
+	Page   shared.PageQuery
+}
+type ReplaceArticleTagsCmd struct {
+	ArticleID     uint
+	TagIDs        []uint
+	ActorUserID   uint
+	IP, UserAgent string
+}
+type ListPublicTagArticlesCmd struct {
+	Locale, TagSlug string
+	Page            shared.PageQuery
+}

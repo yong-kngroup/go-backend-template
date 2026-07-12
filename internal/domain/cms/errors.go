@@ -15,4 +15,5 @@ var (
 	ErrArticleActive     = errors.New("article is not deleted")
 	ErrSlugReserved      = errors.New("slug is reserved by a redirect")
 	ErrRedirectNotFound  = errors.New("redirect not found")
+	ErrTagNotFound       = errors.New("tag not found")
 )

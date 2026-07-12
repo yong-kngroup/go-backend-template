@@ -50,6 +50,13 @@ type ArticleDetailResult struct {
 	SEODescription string                  `json:"seo_description"`
 	CanonicalURL   string                  `json:"canonical_url"`
 	Categories     []ArticleCategoryResult `json:"categories"`
+	Tags           []TagResult             `json:"tags"`
+}
+type TagResult struct {
+	ID     uint   `json:"id"`
+	Locale string `json:"locale"`
+	Name   string `json:"name"`
+	Slug   string `json:"slug"`
 }
 type ArticleCategoryResult struct {
 	CategoryID uint `json:"category_id"`

@@ -107,3 +107,15 @@ type URLRedirect struct {
 	StatusCode                     int
 	CreatedAt                      time.Time
 }
+type Tag struct {
+	ID                   uint
+	CreatedAt, UpdatedAt time.Time
+}
+type TagTranslation struct {
+	TagID              uint
+	Locale, Name, Slug string
+}
+type TagListItem struct {
+	Tag
+	TagTranslation
+}

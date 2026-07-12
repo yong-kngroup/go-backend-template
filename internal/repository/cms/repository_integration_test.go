@@ -76,6 +76,22 @@ func TestRepositoryIntegrationCMSConstraintsAndPublicVisibility(t *testing.T) {
 	if err := repo.ReplaceArticleCategories(ctx, article2.ID, []uint{category.ID}, &category.ID); err != nil {
 		t.Fatalf("set published article category: %v", err)
 	}
+	tag := &domainCMS.Tag{}
+	if err := repo.CreateTag(ctx, tag, &domainCMS.TagTranslation{Locale: "zh-CN", Name: "Go", Slug: "go"}); err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+	if err := repo.UpsertTagTranslation(ctx, &domainCMS.TagTranslation{TagID: tag.ID, Locale: "en-US", Name: "Go", Slug: "go"}); err != nil {
+		t.Fatalf("translate tag: %v", err)
+	}
+	if err := repo.ReplaceArticleTags(ctx, article2.ID, []uint{tag.ID}); err != nil {
+		t.Fatalf("attach tag: %v", err)
+	}
+	if tagged, total, err := repo.ListPublicTagArticles(ctx, "zh-CN", "go", shared.NewPageQuery(1, 20)); err != nil || total != 1 || len(tagged) != 1 || tagged[0].Article.ID != article2.ID {
+		t.Fatalf("tag articles=%#v total=%d err=%v", tagged, total, err)
+	}
+	if err := db.Create(&modelCMS.ArticleTag{ArticleID: article2.ID, TagID: tag.ID}).Error; err == nil {
+		t.Fatal("expected duplicate article tag constraint")
+	}
 	if err := repo.UpsertCategoryTranslation(ctx, &domainCMS.CategoryTranslation{CategoryID: category.ID, Locale: "en-US", Name: "Root", Slug: "root", Description: "English root"}); err != nil {
 		t.Fatalf("upsert category translation: %v", err)
 	}

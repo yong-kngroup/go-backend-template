@@ -17,6 +17,8 @@ const (
 	ActionCMSLocaleCreated    = "cms_locale_created"
 	ActionCMSLocaleUpdated    = "cms_locale_updated"
 	ActionCMSSlugChanged       = "cms_slug_changed"
+	ActionCMSTagCreated        = "cms_tag_created"
+	ActionCMSArticleTagsChanged = "cms_article_tags_changed"
 	ResultSuccess             = "success"
 	ResultFailure             = "failure"
 )

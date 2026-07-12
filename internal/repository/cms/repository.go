@@ -83,6 +83,54 @@ func (r *Repository) CountEnabledLocales(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+func (r *Repository) CreateTag(ctx context.Context, tag *domainCMS.Tag, translation *domainCMS.TagTranslation) error {
+	m := modelCMS.Tag{}
+	if err := r.conn(ctx).Create(&m).Error; err != nil {
+		return err
+	}
+	tag.ID, tag.CreatedAt, tag.UpdatedAt = m.ID, m.CreatedAt, m.UpdatedAt
+	return r.conn(ctx).Create(&modelCMS.TagTranslation{TagID: m.ID, Locale: translation.Locale, Name: translation.Name, Slug: translation.Slug}).Error
+}
+func (r *Repository) FindTag(ctx context.Context, id uint) (*domainCMS.Tag, error) {
+	var m modelCMS.Tag
+	if err := r.conn(ctx).First(&m, id).Error; err != nil {
+		return nil, mapNotFound(err)
+	}
+	return &domainCMS.Tag{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}, nil
+}
+func (r *Repository) FindTagTranslation(ctx context.Context, tagID uint, locale string) (*domainCMS.TagTranslation, error) {
+	var m modelCMS.TagTranslation
+	if err := r.conn(ctx).Where("tag_id = ? AND locale = ?", tagID, locale).First(&m).Error; err != nil {
+		return nil, mapNotFound(err)
+	}
+	return &domainCMS.TagTranslation{TagID: m.TagID, Locale: m.Locale, Name: m.Name, Slug: m.Slug}, nil
+}
+func (r *Repository) UpsertTagTranslation(ctx context.Context, translation *domainCMS.TagTranslation) error {
+	m := modelCMS.TagTranslation{TagID: translation.TagID, Locale: translation.Locale, Name: translation.Name, Slug: translation.Slug}
+	return r.conn(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tag_id"}, {Name: "locale"}}, DoUpdates: clause.Assignments(map[string]any{"name": m.Name, "slug": m.Slug, "updated_at": time.Now()})}).Create(&m).Error
+}
+func (r *Repository) ListTags(ctx context.Context, locale string, page shared.PageQuery) ([]*domainCMS.TagListItem, int64, error) {
+	db := r.conn(ctx).Table("tag_translations").Joins("JOIN tags ON tags.id = tag_translations.tag_id").Where("tag_translations.locale = ?", locale)
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	type row struct {
+		TagID                uint
+		Name, Slug           string
+		CreatedAt, UpdatedAt time.Time
+	}
+	var rows []row
+	if err := db.Select("tags.id AS tag_id, tags.created_at, tags.updated_at, tag_translations.name, tag_translations.slug").Order("tag_translations.name, tags.id").Limit(page.PerPage).Offset(page.Offset()).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]*domainCMS.TagListItem, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, &domainCMS.TagListItem{Tag: domainCMS.Tag{ID: row.TagID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, TagTranslation: domainCMS.TagTranslation{TagID: row.TagID, Locale: locale, Name: row.Name, Slug: row.Slug}})
+	}
+	return result, total, nil
+}
+
 func (r *Repository) CreateCategory(ctx context.Context, category *domainCMS.Category, tr *domainCMS.CategoryTranslation) error {
 	m := modelCMS.Category{ParentID: category.ParentID, SortOrder: category.SortOrder, IsEnabled: category.Enabled}
 	if err := r.conn(ctx).Create(&m).Error; err != nil {
@@ -290,6 +338,36 @@ func (r *Repository) ListArticleCategories(ctx context.Context, articleID uint) 
 	}
 	return result, nil
 }
+func (r *Repository) ListArticleTags(ctx context.Context, articleID uint, locale string) ([]*domainCMS.TagListItem, error) {
+	type row struct {
+		TagID      uint
+		Name, Slug string
+	}
+	var rows []row
+	err := r.conn(ctx).Table("article_tags").Joins("JOIN tags ON tags.id = article_tags.tag_id").Joins("JOIN tag_translations ON tag_translations.tag_id = tags.id").Where("article_tags.article_id = ? AND tag_translations.locale = ?", articleID, locale).Order("tag_translations.name, tags.id").Select("tags.id AS tag_id, tag_translations.name, tag_translations.slug").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*domainCMS.TagListItem, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, &domainCMS.TagListItem{Tag: domainCMS.Tag{ID: row.TagID}, TagTranslation: domainCMS.TagTranslation{TagID: row.TagID, Locale: locale, Name: row.Name, Slug: row.Slug}})
+	}
+	return result, nil
+}
+func (r *Repository) ReplaceArticleTags(ctx context.Context, articleID uint, tagIDs []uint) error {
+	db := r.conn(ctx)
+	if err := db.Where("article_id = ?", articleID).Delete(&modelCMS.ArticleTag{}).Error; err != nil {
+		return err
+	}
+	if len(tagIDs) == 0 {
+		return nil
+	}
+	records := make([]modelCMS.ArticleTag, 0, len(tagIDs))
+	for _, tagID := range tagIDs {
+		records = append(records, modelCMS.ArticleTag{ArticleID: articleID, TagID: tagID})
+	}
+	return db.Create(&records).Error
+}
 
 func (r *Repository) CreateArticleTranslation(ctx context.Context, tr *domainCMS.ArticleTranslation) error {
 	m := translationModel(tr.ArticleID, tr)
@@ -488,6 +566,36 @@ func (r *Repository) ListPublicArticles(ctx context.Context, locale string, cate
 		items = append(items, &domainCMS.PublicArticleListItem{Article: domainCMS.Article{ID: row.ArticleID, UpdatedAt: row.UpdatedAt}, ArticleTranslation: domainCMS.ArticleTranslation{ArticleID: row.ArticleID, Locale: locale, Title: row.Title, Slug: row.Slug, Summary: row.Summary, ContentFormat: row.ContentFormat, PublishedAt: row.PublishedAt, Status: domainCMS.TranslationPublished, UpdatedAt: row.UpdatedAt}, PrimaryCategoryID: row.PrimaryCategoryID, PrimaryCategoryName: row.PrimaryCategoryName, PrimaryCategorySlug: row.PrimaryCategorySlug})
 	}
 	return items, total, nil
+}
+
+func (r *Repository) PublicTagExists(ctx context.Context, locale, slug string) (bool, error) {
+	var count int64
+	err := r.conn(ctx).Table("tag_translations").Joins("JOIN locales ON locales.code = tag_translations.locale").Where("tag_translations.locale = ? AND tag_translations.slug = ? AND locales.is_enabled", locale, slug).Count(&count).Error
+	return count == 1, err
+}
+func (r *Repository) ListPublicTagArticles(ctx context.Context, locale, tagSlug string, page shared.PageQuery) ([]*domainCMS.PublicArticleListItem, int64, error) {
+	db := r.conn(ctx).Table("article_translations").Joins("JOIN articles ON articles.id = article_translations.article_id").Joins("LEFT JOIN article_categories primary_ac ON primary_ac.article_id = articles.id AND primary_ac.is_primary").Joins("LEFT JOIN categories primary_c ON primary_c.id = primary_ac.category_id AND primary_c.is_enabled").Joins("LEFT JOIN category_translations primary_ct ON primary_ct.category_id = primary_c.id AND primary_ct.locale = article_translations.locale").Joins("JOIN article_tags filter_at ON filter_at.article_id = articles.id").Joins("JOIN tag_translations filter_tt ON filter_tt.tag_id = filter_at.tag_id AND filter_tt.locale = article_translations.locale").Where("articles.deleted_at IS NULL AND article_translations.locale = ? AND article_translations.status = 'published' AND article_translations.published_at <= NOW() AND filter_tt.slug = ?", locale, tagSlug)
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	type row struct {
+		ArticleID                                uint
+		Title, Slug, Summary, ContentFormat      string
+		PublishedAt                              *time.Time
+		UpdatedAt                                time.Time
+		PrimaryCategoryID                        *uint
+		PrimaryCategoryName, PrimaryCategorySlug string
+	}
+	var rows []row
+	if err := db.Select("articles.id AS article_id, article_translations.title, article_translations.slug, article_translations.summary, article_translations.content_format, article_translations.published_at, article_translations.updated_at, primary_c.id AS primary_category_id, primary_ct.name AS primary_category_name, primary_ct.slug AS primary_category_slug").Order("article_translations.published_at DESC, article_translations.id DESC").Limit(page.PerPage).Offset(page.Offset()).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]*domainCMS.PublicArticleListItem, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, &domainCMS.PublicArticleListItem{Article: domainCMS.Article{ID: row.ArticleID, UpdatedAt: row.UpdatedAt}, ArticleTranslation: domainCMS.ArticleTranslation{ArticleID: row.ArticleID, Locale: locale, Title: row.Title, Slug: row.Slug, Summary: row.Summary, ContentFormat: row.ContentFormat, PublishedAt: row.PublishedAt, Status: domainCMS.TranslationPublished, UpdatedAt: row.UpdatedAt}, PrimaryCategoryID: row.PrimaryCategoryID, PrimaryCategoryName: row.PrimaryCategoryName, PrimaryCategorySlug: row.PrimaryCategorySlug})
+	}
+	return result, total, nil
 }
 
 func translationModel(articleID uint, tr *domainCMS.ArticleTranslation) modelCMS.ArticleTranslation {

@@ -54,6 +54,19 @@ func (r *testRepo) CountEnabledLocales(context.Context) (int64, error) {
 	}
 	return r.enabledCount, nil
 }
+func (*testRepo) CreateTag(context.Context, *domainCMS.Tag, *domainCMS.TagTranslation) error {
+	return nil
+}
+func (*testRepo) FindTag(_ context.Context, id uint) (*domainCMS.Tag, error) {
+	return &domainCMS.Tag{ID: id}, nil
+}
+func (*testRepo) FindTagTranslation(context.Context, uint, string) (*domainCMS.TagTranslation, error) {
+	return nil, shared.ErrNotFound
+}
+func (*testRepo) UpsertTagTranslation(context.Context, *domainCMS.TagTranslation) error { return nil }
+func (*testRepo) ListTags(context.Context, string, shared.PageQuery) ([]*domainCMS.TagListItem, int64, error) {
+	return nil, 0, nil
+}
 func (*testRepo) CreateCategory(context.Context, *domainCMS.Category, *domainCMS.CategoryTranslation) error {
 	return nil
 }
@@ -108,6 +121,10 @@ func (*testRepo) FindURLRedirect(context.Context, string, string) (*domainCMS.UR
 func (*testRepo) ListArticleCategories(context.Context, uint) ([]domainCMS.ArticleCategory, error) {
 	return nil, nil
 }
+func (*testRepo) ListArticleTags(context.Context, uint, string) ([]*domainCMS.TagListItem, error) {
+	return nil, nil
+}
+func (*testRepo) ReplaceArticleTags(context.Context, uint, []uint) error { return nil }
 func (*testRepo) SaveArticleTranslation(context.Context, *domainCMS.ArticleTranslation) error {
 	return nil
 }
@@ -141,6 +158,10 @@ func (*testRepo) PublicCategoryExists(context.Context, string, string) (bool, er
 }
 func (r *testRepo) ListPublicArticles(context.Context, string, *string, shared.PageQuery) ([]*domainCMS.PublicArticleListItem, int64, error) {
 	return r.publicList, int64(len(r.publicList)), nil
+}
+func (*testRepo) PublicTagExists(context.Context, string, string) (bool, error) { return true, nil }
+func (*testRepo) ListPublicTagArticles(context.Context, string, string, shared.PageQuery) ([]*domainCMS.PublicArticleListItem, int64, error) {
+	return nil, 0, nil
 }
 func TestMoveCategoryRejectsDescendantAsParent(t *testing.T) {
 	repo := &testRepo{descendant: true}

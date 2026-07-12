@@ -39,6 +39,70 @@ func (s *Service) ListLocales(ctx context.Context) ([]*LocaleResult, error) {
 	}
 	return result, nil
 }
+func (s *Service) CreateTag(ctx context.Context, cmd CreateTagCmd) (*TagResult, error) {
+	if err := validNameSlug(cmd.Name, cmd.Slug); err != nil {
+		return nil, err
+	}
+	if err := s.requireLocale(ctx, cmd.Locale); err != nil {
+		return nil, err
+	}
+	tag := &domainCMS.Tag{}
+	tr := &domainCMS.TagTranslation{Locale: strings.TrimSpace(cmd.Locale), Name: strings.TrimSpace(cmd.Name), Slug: strings.TrimSpace(cmd.Slug)}
+	if err := s.tx.Do(ctx, func(ctx context.Context) error {
+		if err := s.ensureSlugAvailable(ctx, tr.Locale, tagPath(tr.Locale, tr.Slug)); err != nil {
+			return err
+		}
+		if err := s.repo.CreateTag(ctx, tag, tr); err != nil {
+			return err
+		}
+		return s.publishAudit(ctx, cmd.ActorUserID, "tag", tag.ID, domainAudit.ActionCMSTagCreated, cmd.IP, cmd.UserAgent, map[string]any{"locale": tr.Locale, "slug": tr.Slug})
+	}); err != nil {
+		return nil, err
+	}
+	return tagResult(tag.ID, tr), nil
+}
+func (s *Service) ListTags(ctx context.Context, cmd ListTagsCmd) ([]*TagResult, shared.PageResult, error) {
+	if err := s.requireExistingLocale(ctx, cmd.Locale); err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	page := shared.NewPageQuery(cmd.Page.Page, cmd.Page.PerPage)
+	items, total, err := s.repo.ListTags(ctx, cmd.Locale, page)
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	out := make([]*TagResult, 0, len(items))
+	for _, v := range items {
+		out = append(out, tagResult(v.ID, &v.TagTranslation))
+	}
+	return out, shared.PageResult{Page: page.Page, PerPage: page.PerPage, Total: total}, nil
+}
+func (s *Service) ReplaceArticleTags(ctx context.Context, cmd ReplaceArticleTagsCmd) error {
+	if cmd.ArticleID == 0 {
+		return domainCMS.ErrInvalidInput
+	}
+	if _, err := s.repo.FindArticle(ctx, cmd.ArticleID); err != nil {
+		return mapArticle(err)
+	}
+	seen := map[uint]struct{}{}
+	for _, id := range cmd.TagIDs {
+		if id == 0 {
+			return domainCMS.ErrInvalidInput
+		}
+		if _, ok := seen[id]; ok {
+			return domainCMS.ErrInvalidInput
+		}
+		seen[id] = struct{}{}
+		if _, err := s.repo.FindTag(ctx, id); err != nil {
+			return mapTag(err)
+		}
+	}
+	return s.tx.Do(ctx, func(ctx context.Context) error {
+		if err := s.repo.ReplaceArticleTags(ctx, cmd.ArticleID, cmd.TagIDs); err != nil {
+			return err
+		}
+		return s.publishAudit(ctx, cmd.ActorUserID, "article", cmd.ArticleID, domainAudit.ActionCMSArticleTagsChanged, cmd.IP, cmd.UserAgent, map[string]any{"tag_ids": cmd.TagIDs})
+	})
+}
 func (s *Service) CreateLocale(ctx context.Context, cmd CreateLocaleCmd) (*LocaleResult, error) {
 	code, name := strings.TrimSpace(cmd.Code), strings.TrimSpace(cmd.Name)
 	if !validLocale(code) || name == "" {
@@ -169,6 +233,54 @@ func (s *Service) UpsertCategoryTranslation(ctx context.Context, cmd UpsertCateg
 		return nil, err
 	}
 	return &CategoryResult{ID: category.ID, ParentID: category.ParentID, SortOrder: category.SortOrder, Locale: translation.Locale, Name: translation.Name, Slug: translation.Slug}, nil
+}
+func (s *Service) UpsertTagTranslation(ctx context.Context, cmd UpsertTagTranslationCmd) (*TagResult, error) {
+	if cmd.TagID == 0 {
+		return nil, domainCMS.ErrInvalidInput
+	}
+	if err := validNameSlug(cmd.Name, cmd.Slug); err != nil {
+		return nil, err
+	}
+	if err := s.requireExistingLocale(ctx, cmd.Locale); err != nil {
+		return nil, err
+	}
+	if _, err := s.repo.FindTag(ctx, cmd.TagID); err != nil {
+		return nil, mapTag(err)
+	}
+	tr := &domainCMS.TagTranslation{TagID: cmd.TagID, Locale: strings.TrimSpace(cmd.Locale), Name: strings.TrimSpace(cmd.Name), Slug: strings.TrimSpace(cmd.Slug)}
+	old, err := s.repo.FindTagTranslation(ctx, cmd.TagID, tr.Locale)
+	if err != nil && !errors.Is(err, shared.ErrNotFound) {
+		return nil, err
+	}
+	if err := s.tx.Do(ctx, func(ctx context.Context) error {
+		if old != nil && old.Slug != tr.Slug {
+			enabled, e := s.repo.LocaleEnabled(ctx, tr.Locale)
+			if e != nil {
+				return e
+			}
+			if enabled {
+				if e = s.ensureSlugAvailable(ctx, tr.Locale, tagPath(tr.Locale, tr.Slug)); e != nil {
+					return e
+				}
+			}
+		}
+		if e := s.repo.UpsertTagTranslation(ctx, tr); e != nil {
+			return e
+		}
+		if old != nil && old.Slug != tr.Slug {
+			enabled, e := s.repo.LocaleEnabled(ctx, tr.Locale)
+			if e != nil {
+				return e
+			}
+			if enabled {
+				return s.repo.SaveURLRedirect(ctx, &domainCMS.URLRedirect{Locale: tr.Locale, SourcePath: tagPath(tr.Locale, old.Slug), TargetPath: tagPath(tr.Locale, tr.Slug), StatusCode: 301})
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return tagResult(cmd.TagID, tr), nil
 }
 func (s *Service) MoveCategory(ctx context.Context, cmd MoveCategoryCmd) error {
 	if cmd.CategoryID == 0 {
@@ -473,9 +585,16 @@ func (s *Service) GetArticleTranslation(ctx context.Context, cmd GetArticleTrans
 	if err != nil {
 		return nil, err
 	}
-	result := &ArticleDetailResult{ID: article.ID, AuthorUserID: article.AuthorUserID, Locale: translation.Locale, Title: translation.Title, Slug: translation.Slug, Summary: translation.Summary, Content: translation.Content, ContentFormat: translation.ContentFormat, Status: string(translation.Status), PublishedAt: translation.PublishedAt, SEOTitle: translation.SEOTitle, SEODescription: translation.SEODescription, CanonicalURL: translation.CanonicalURL, Categories: make([]ArticleCategoryResult, 0, len(categories))}
+	tags, err := s.repo.ListArticleTags(ctx, cmd.ArticleID, cmd.Locale)
+	if err != nil {
+		return nil, err
+	}
+	result := &ArticleDetailResult{ID: article.ID, AuthorUserID: article.AuthorUserID, Locale: translation.Locale, Title: translation.Title, Slug: translation.Slug, Summary: translation.Summary, Content: translation.Content, ContentFormat: translation.ContentFormat, Status: string(translation.Status), PublishedAt: translation.PublishedAt, SEOTitle: translation.SEOTitle, SEODescription: translation.SEODescription, CanonicalURL: translation.CanonicalURL, Categories: make([]ArticleCategoryResult, 0, len(categories)), Tags: make([]TagResult, 0, len(tags))}
 	for _, category := range categories {
 		result.Categories = append(result.Categories, ArticleCategoryResult{CategoryID: category.CategoryID, IsPrimary: category.IsPrimary})
+	}
+	for _, tag := range tags {
+		result.Tags = append(result.Tags, *tagResult(tag.ID, &tag.TagTranslation))
 	}
 	return result, nil
 }
@@ -554,6 +673,31 @@ func (s *Service) ListPublishedCategoryArticles(ctx context.Context, cmd ListPub
 	}
 	return s.listPublishedArticles(ctx, cmd.Locale, &cmd.CategorySlug, cmd.Page)
 }
+func (s *Service) ListPublishedTagArticles(ctx context.Context, cmd ListPublicTagArticlesCmd) ([]*PublicArticleListResult, shared.PageResult, error) {
+	if strings.TrimSpace(cmd.TagSlug) == "" {
+		return nil, shared.PageResult{}, domainCMS.ErrInvalidInput
+	}
+	if err := s.requireLocale(ctx, cmd.Locale); err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	ok, err := s.repo.PublicTagExists(ctx, cmd.Locale, cmd.TagSlug)
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	if !ok {
+		return nil, shared.PageResult{}, domainCMS.ErrTagNotFound
+	}
+	page := shared.NewPageQuery(cmd.Page.Page, cmd.Page.PerPage)
+	items, total, err := s.repo.ListPublicTagArticles(ctx, cmd.Locale, cmd.TagSlug, page)
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
+	results := make([]*PublicArticleListResult, 0, len(items))
+	for _, item := range items {
+		results = append(results, &PublicArticleListResult{ID: item.Article.ID, Locale: item.Locale, Title: item.Title, Slug: item.Slug, Summary: item.Summary, ContentFormat: item.ContentFormat, PublishedAt: item.PublishedAt, UpdatedAt: item.ArticleTranslation.UpdatedAt})
+	}
+	return results, shared.PageResult{Page: page.Page, PerPage: page.PerPage, Total: total}, nil
+}
 func (s *Service) listPublishedArticles(ctx context.Context, locale string, categorySlug *string, page shared.PageQuery) ([]*PublicArticleListResult, shared.PageResult, error) {
 	if err := s.requireLocale(ctx, locale); err != nil {
 		return nil, shared.PageResult{}, err
@@ -624,6 +768,12 @@ func mapArticle(err error) error {
 	}
 	return err
 }
+func mapTag(err error) error {
+	if errors.Is(err, shared.ErrNotFound) {
+		return domainCMS.ErrTagNotFound
+	}
+	return err
+}
 func mapLocale(err error) error {
 	if errors.Is(err, shared.ErrNotFound) {
 		return domainCMS.ErrLocaleNotFound
@@ -666,6 +816,10 @@ func (s *Service) ensureSlugAvailable(ctx context.Context, locale, path string) 
 }
 func articlePath(locale, slug string) string  { return fmt.Sprintf("/%s/articles/%s", locale, slug) }
 func categoryPath(locale, slug string) string { return fmt.Sprintf("/%s/categories/%s", locale, slug) }
+func tagPath(locale, slug string) string      { return fmt.Sprintf("/%s/tags/%s", locale, slug) }
+func tagResult(id uint, tr *domainCMS.TagTranslation) *TagResult {
+	return &TagResult{ID: id, Locale: tr.Locale, Name: tr.Name, Slug: tr.Slug}
+}
 func localeResult(locale *domainCMS.Locale) *LocaleResult {
 	return &LocaleResult{Code: locale.Code, Name: locale.Name, IsDefault: locale.IsDefault, IsEnabled: locale.IsEnabled, SortOrder: locale.SortOrder}
 }

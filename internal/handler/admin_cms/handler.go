@@ -25,6 +25,9 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	g := r.Group("/api/v1/admin/cms")
 	g.GET("/locales", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.locale.manage"), h.ListLocales)
 	g.POST("/locales", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.locale.manage"), h.CreateLocale)
+	g.GET("/tags", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.tag.manage"), h.ListTags)
+	g.POST("/tags", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.tag.manage"), h.CreateTag)
+	g.PUT("/tags/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.tag.manage"), h.UpsertTagTranslation)
 	g.PATCH("/locales/:code", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.locale.manage"), h.UpdateLocale)
 	g.POST("/categories", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.category.manage"), h.CreateCategory)
 	g.GET("/categories", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.category.manage"), h.ListCategories)
@@ -37,6 +40,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	g.POST("/articles/:id/restore", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.archive"), h.RestoreArticle)
 	g.GET("/articles/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.GetArticleTranslation)
 	g.PUT("/articles/:id/categories", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.ReplaceArticleCategories)
+	g.PUT("/articles/:id/tags", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.ReplaceArticleTags)
 	g.POST("/articles/:id/translations", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.CreateTranslation)
 	g.PUT("/articles/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.UpdateTranslation)
 	g.POST("/articles/:id/translations/:locale/publish", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.publish"), h.PublishTranslation)
@@ -85,6 +89,18 @@ type categoryTranslationReq struct {
 	SEOTitle       string `json:"seo_title"`
 	SEODescription string `json:"seo_description"`
 }
+type tagReq struct {
+	Locale string `json:"locale" binding:"required"`
+	Name   string `json:"name" binding:"required"`
+	Slug   string `json:"slug" binding:"required"`
+}
+type tagTranslationReq struct {
+	Name string `json:"name" binding:"required"`
+	Slug string `json:"slug" binding:"required"`
+}
+type replaceTagsReq struct {
+	TagIDs []uint `json:"tag_ids"`
+}
 type articleReq struct {
 	Locale         string `json:"locale" binding:"required"`
 	Title          string `json:"title" binding:"required"`
@@ -131,6 +147,51 @@ func (h *Handler) CreateLocale(c *gin.Context) {
 		return
 	}
 	handler.OK(c, result)
+}
+func (h *Handler) ListTags(c *gin.Context) {
+	var q handler.PageQuery
+	if c.ShouldBindQuery(&q) != nil {
+		invalid(c)
+		return
+	}
+	r, p, e := h.cms.ListTags(c, svcCMS.ListTagsCmd{Locale: c.Query("locale"), Page: q.ToDomain()})
+	if e != nil {
+		fail(c, e)
+		return
+	}
+	handler.OKPage(c, r, handler.MetaFromPageResult(p))
+}
+func (h *Handler) CreateTag(c *gin.Context) {
+	var req tagReq
+	if c.ShouldBindJSON(&req) != nil {
+		invalid(c)
+		return
+	}
+	m := handler.AuditMetaFromRequest(c)
+	r, e := h.cms.CreateTag(c, svcCMS.CreateTagCmd{Locale: req.Locale, Name: req.Name, Slug: req.Slug, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: m.IP, UserAgent: m.UserAgent})
+	if e != nil {
+		fail(c, e)
+		return
+	}
+	handler.OK(c, r)
+}
+func (h *Handler) UpsertTagTranslation(c *gin.Context) {
+	id, ok := idParam(c)
+	if !ok {
+		return
+	}
+	var req tagTranslationReq
+	if c.ShouldBindJSON(&req) != nil {
+		invalid(c)
+		return
+	}
+	m := handler.AuditMetaFromRequest(c)
+	r, e := h.cms.UpsertTagTranslation(c, svcCMS.UpsertTagTranslationCmd{TagID: id, Locale: c.Param("locale"), Name: req.Name, Slug: req.Slug, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: m.IP, UserAgent: m.UserAgent})
+	if e != nil {
+		fail(c, e)
+		return
+	}
+	handler.OK(c, r)
 }
 func (h *Handler) UpdateLocale(c *gin.Context) {
 	var req updateLocaleReq
@@ -286,6 +347,23 @@ func (h *Handler) ReplaceArticleCategories(c *gin.Context) {
 	}
 	handler.OK(c, gin.H{"id": id, "category_ids": req.CategoryIDs, "primary_category_id": req.PrimaryCategoryID})
 }
+func (h *Handler) ReplaceArticleTags(c *gin.Context) {
+	id, ok := idParam(c)
+	if !ok {
+		return
+	}
+	var req replaceTagsReq
+	if c.ShouldBindJSON(&req) != nil {
+		invalid(c)
+		return
+	}
+	m := handler.AuditMetaFromRequest(c)
+	if e := h.cms.ReplaceArticleTags(c, svcCMS.ReplaceArticleTagsCmd{ArticleID: id, TagIDs: req.TagIDs, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: m.IP, UserAgent: m.UserAgent}); e != nil {
+		fail(c, e)
+		return
+	}
+	handler.OK(c, gin.H{"id": id, "tag_ids": req.TagIDs})
+}
 func (h *Handler) CreateTranslation(c *gin.Context) {
 	id, ok := idParam(c)
 	if !ok {
@@ -376,6 +454,8 @@ func fail(c *gin.Context, err error) {
 		handler.Fail(c, "ARTICLE_NOT_DELETED", "article is not deleted")
 	case errors.Is(err, domainCMS.ErrSlugReserved):
 		handler.Fail(c, "SLUG_RESERVED", "slug is reserved by a redirect")
+	case errors.Is(err, domainCMS.ErrTagNotFound):
+		handler.Fail(c, "TAG_NOT_FOUND", "tag not found")
 	default:
 		handler.Fail(c, "INTERNAL_ERROR", err.Error())
 	}

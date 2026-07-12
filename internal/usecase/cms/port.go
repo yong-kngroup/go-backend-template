@@ -7,6 +7,9 @@ import (
 )
 
 type AdminService interface {
+	CreateTag(context.Context, CreateTagCmd) (*TagResult, error)
+	UpsertTagTranslation(context.Context, UpsertTagTranslationCmd) (*TagResult, error)
+	ListTags(context.Context, ListTagsCmd) ([]*TagResult, shared.PageResult, error)
 	ListLocales(context.Context) ([]*LocaleResult, error)
 	CreateLocale(context.Context, CreateLocaleCmd) (*LocaleResult, error)
 	UpdateLocale(context.Context, UpdateLocaleCmd) (*LocaleResult, error)
@@ -23,6 +26,7 @@ type AdminService interface {
 	RestoreArticle(context.Context, RestoreArticleCmd) error
 	ListCategories(context.Context, ListCategoriesCmd) ([]*CategoryTreeResult, error)
 	ReplaceArticleCategories(context.Context, ReplaceArticleCategoriesCmd) error
+	ReplaceArticleTags(context.Context, ReplaceArticleTagsCmd) error
 	ListArticles(context.Context, ListArticlesCmd) ([]*ArticleResult, shared.PageResult, error)
 	GetArticleTranslation(context.Context, GetArticleTranslationCmd) (*ArticleDetailResult, error)
 }
@@ -34,6 +38,7 @@ type PublicContentService interface {
 	ListPublishedCategories(context.Context, string) ([]*CategoryTreeResult, error)
 	ListPublicSitemapEntries(context.Context, ListPublicSitemapEntriesCmd) ([]*SitemapEntryResult, shared.PageResult, error)
 	ResolveRedirect(context.Context, string, string) (*RedirectResult, error)
+	ListPublishedTagArticles(context.Context, ListPublicTagArticlesCmd) ([]*PublicArticleListResult, shared.PageResult, error)
 }
 
 var _ AdminService = (*Service)(nil)

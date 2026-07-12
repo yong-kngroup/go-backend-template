@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS article_tags;
+DROP TABLE IF EXISTS tag_translations;
+DROP TABLE IF EXISTS tags;
