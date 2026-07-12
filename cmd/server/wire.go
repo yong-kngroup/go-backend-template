@@ -134,6 +134,7 @@ func initApp(cfg *config.Config) *App {
 	}
 	mediaSvc := SvcMedia.New(txManager, mediaRepo, mediaStorage)
 	cmsSvc.SetMediaFinder(mediaSvc)
+	cmsSvc.SetPublicMediaFinder(mediaSvc)
 	if err := bootstrapSvc.BootstrapAdmin(context.Background(), SvcBootstrap.BootstrapAdminCmd{
 		Enabled:  cfg.BootstrapAdmin.Enabled,
 		Name:     cfg.BootstrapAdmin.Name,

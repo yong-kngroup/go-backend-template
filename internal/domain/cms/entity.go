@@ -34,6 +34,7 @@ type CategoryTranslation struct {
 type Article struct {
 	ID           uint
 	AuthorUserID uint
+	CoverMediaID *uint
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time

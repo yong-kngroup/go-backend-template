@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	domainCMS "github.com/freeDog-wy/go-backend-template/internal/domain/cms"
+	domainMedia "github.com/freeDog-wy/go-backend-template/internal/domain/media"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	"testing"
 	"time"
@@ -18,6 +19,16 @@ type recordingEventBus struct{ events []shared.Event }
 func (b *recordingEventBus) Publish(_ context.Context, events ...shared.Event) error {
 	b.events = append(b.events, events...)
 	return nil
+}
+
+type testPublicMediaFinder struct {
+	assets []domainMedia.PublicAsset
+	ids    []uint
+}
+
+func (f *testPublicMediaFinder) ListPublic(_ context.Context, _ string, ids []uint) ([]domainMedia.PublicAsset, error) {
+	f.ids = append(f.ids, ids...)
+	return f.assets, nil
 }
 
 type testRepo struct {
@@ -194,6 +205,26 @@ func TestGetPublishedArticleHidesAbsentTranslation(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+func TestGetPublishedArticleIncludesPublicCover(t *testing.T) {
+	coverID := uint(12)
+	repo := &testRepo{public: &domainCMS.PublicArticle{
+		Article:            domainCMS.Article{ID: 7, CoverMediaID: &coverID},
+		ArticleTranslation: domainCMS.ArticleTranslation{ArticleID: 7, Locale: "zh-CN", Title: "Article", Slug: "article"},
+	}}
+	media := &testPublicMediaFinder{assets: []domainMedia.PublicAsset{{ID: coverID, URL: "https://cdn.example.com/covers/article.png", AltText: "Article cover", Title: "Cover"}}}
+	svc := New(testTx{}, repo)
+	svc.SetPublicMediaFinder(media)
+	result, err := svc.GetPublishedArticle(context.Background(), "zh-CN", "article")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Cover == nil || result.Cover.ID != coverID || result.Cover.AltText != "Article cover" {
+		t.Fatalf("cover = %#v", result.Cover)
+	}
+	if len(media.ids) != 1 || media.ids[0] != coverID {
+		t.Fatalf("requested media IDs = %#v", media.ids)
+	}
+}
 func TestListCategoriesBuildsTree(t *testing.T) {
 	rootID := uint(1)
 	repo := &testRepo{tree: []*domainCMS.CategoryTreeItem{
@@ -221,17 +252,20 @@ func TestReplaceArticleCategoriesRequiresPrimaryWithinCategories(t *testing.T) {
 }
 func TestListPublishedArticlesReturnsOnlySummaryFields(t *testing.T) {
 	categoryID := uint(4)
+	coverID := uint(8)
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	repo := &testRepo{publicList: []*domainCMS.PublicArticleListItem{{
-		Article:            domainCMS.Article{ID: 9},
+		Article:            domainCMS.Article{ID: 9, CoverMediaID: &coverID},
 		ArticleTranslation: domainCMS.ArticleTranslation{Locale: "zh-CN", Title: "Published", Slug: "published", Summary: "Summary", Content: "must not be returned", ContentFormat: "markdown", PublishedAt: &now, UpdatedAt: now},
 		PrimaryCategoryID:  &categoryID, PrimaryCategoryName: "News", PrimaryCategorySlug: "news",
 	}}}
-	results, page, err := New(testTx{}, repo).ListPublishedArticles(context.Background(), ListPublicArticlesCmd{Locale: "zh-CN", Page: shared.NewPageQuery(1, 20)})
+	svc := New(testTx{}, repo)
+	svc.SetPublicMediaFinder(&testPublicMediaFinder{})
+	results, page, err := svc.ListPublishedArticles(context.Background(), ListPublicArticlesCmd{Locale: "zh-CN", Page: shared.NewPageQuery(1, 20)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].PrimaryCategory == nil || results[0].PrimaryCategory.Slug != "news" || page.Total != 1 {
+	if len(results) != 1 || results[0].Cover != nil || results[0].PrimaryCategory == nil || results[0].PrimaryCategory.Slug != "news" || page.Total != 1 {
 		t.Fatalf("result = %#v, page = %#v", results, page)
 	}
 }

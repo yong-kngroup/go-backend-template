@@ -8,20 +8,25 @@ import (
 
 	domainAudit "github.com/freeDog-wy/go-backend-template/internal/domain/audit"
 	domainCMS "github.com/freeDog-wy/go-backend-template/internal/domain/cms"
+	domainMedia "github.com/freeDog-wy/go-backend-template/internal/domain/media"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	"strings"
 	"time"
 )
 
 type Service struct {
-	tx          shared.TxManager
-	repo        domainCMS.Repository
-	now         func() time.Time
-	eventBus    shared.EventBus
-	mediaFinder ReadyMediaFinder
+	tx                shared.TxManager
+	repo              domainCMS.Repository
+	now               func() time.Time
+	eventBus          shared.EventBus
+	mediaFinder       ReadyMediaFinder
+	publicMediaFinder PublicMediaFinder
 }
 type ReadyMediaFinder interface {
 	IsReady(context.Context, uint) (bool, error)
+}
+type PublicMediaFinder interface {
+	ListPublic(context.Context, string, []uint) ([]domainMedia.PublicAsset, error)
 }
 
 func New(tx shared.TxManager, repo domainCMS.Repository, eventBuses ...shared.EventBus) *Service {
@@ -31,7 +36,8 @@ func New(tx shared.TxManager, repo domainCMS.Repository, eventBuses ...shared.Ev
 	}
 	return service
 }
-func (s *Service) SetMediaFinder(f ReadyMediaFinder) { s.mediaFinder = f }
+func (s *Service) SetMediaFinder(f ReadyMediaFinder)        { s.mediaFinder = f }
+func (s *Service) SetPublicMediaFinder(f PublicMediaFinder) { s.publicMediaFinder = f }
 
 func (s *Service) ListLocales(ctx context.Context) ([]*LocaleResult, error) {
 	locales, err := s.repo.ListLocales(ctx)
@@ -645,7 +651,11 @@ func (s *Service) GetPublishedArticle(ctx context.Context, locale, slug string) 
 	if err != nil {
 		return nil, err
 	}
-	result := &PublicArticleResult{ID: a.Article.ID, Locale: a.Locale, Title: a.Title, Slug: a.Slug, Summary: a.Summary, Content: a.Content, ContentFormat: a.ContentFormat, PublishedAt: a.PublishedAt, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CanonicalURL: a.CanonicalURL, UpdatedAt: a.ArticleTranslation.UpdatedAt, AvailableLocales: make([]PublicLocaleRef, 0, len(locales)), Breadcrumbs: make([]PublicCategoryRef, 0, len(breadcrumbs))}
+	covers, err := s.publicCovers(ctx, locale, articleCoverIDs([]*domainCMS.PublicArticleListItem{{Article: a.Article}}))
+	if err != nil {
+		return nil, err
+	}
+	result := &PublicArticleResult{ID: a.Article.ID, Locale: a.Locale, Title: a.Title, Slug: a.Slug, Summary: a.Summary, Content: a.Content, ContentFormat: a.ContentFormat, PublishedAt: a.PublishedAt, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CanonicalURL: a.CanonicalURL, Cover: coverFor(a.Article.CoverMediaID, covers), UpdatedAt: a.ArticleTranslation.UpdatedAt, AvailableLocales: make([]PublicLocaleRef, 0, len(locales)), Breadcrumbs: make([]PublicCategoryRef, 0, len(breadcrumbs))}
 	for _, translation := range locales {
 		result.AvailableLocales = append(result.AvailableLocales, PublicLocaleRef{Locale: translation.Locale, Slug: translation.Slug})
 	}
@@ -720,9 +730,13 @@ func (s *Service) ListPublishedTagArticles(ctx context.Context, cmd ListPublicTa
 	if err != nil {
 		return nil, shared.PageResult{}, err
 	}
+	covers, err := s.publicCovers(ctx, cmd.Locale, articleCoverIDs(items))
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
 	results := make([]*PublicArticleListResult, 0, len(items))
 	for _, item := range items {
-		results = append(results, &PublicArticleListResult{ID: item.Article.ID, Locale: item.Locale, Title: item.Title, Slug: item.Slug, Summary: item.Summary, ContentFormat: item.ContentFormat, PublishedAt: item.PublishedAt, UpdatedAt: item.ArticleTranslation.UpdatedAt})
+		results = append(results, &PublicArticleListResult{ID: item.Article.ID, Locale: item.Locale, Title: item.Title, Slug: item.Slug, Summary: item.Summary, ContentFormat: item.ContentFormat, PublishedAt: item.PublishedAt, Cover: coverFor(item.Article.CoverMediaID, covers), UpdatedAt: item.ArticleTranslation.UpdatedAt})
 	}
 	return results, shared.PageResult{Page: page.Page, PerPage: page.PerPage, Total: total}, nil
 }
@@ -735,15 +749,50 @@ func (s *Service) listPublishedArticles(ctx context.Context, locale string, cate
 	if err != nil {
 		return nil, shared.PageResult{}, err
 	}
+	covers, err := s.publicCovers(ctx, locale, articleCoverIDs(items))
+	if err != nil {
+		return nil, shared.PageResult{}, err
+	}
 	results := make([]*PublicArticleListResult, 0, len(items))
 	for _, item := range items {
-		result := &PublicArticleListResult{ID: item.Article.ID, Locale: item.Locale, Title: item.Title, Slug: item.Slug, Summary: item.Summary, ContentFormat: item.ContentFormat, PublishedAt: item.PublishedAt, UpdatedAt: item.ArticleTranslation.UpdatedAt}
+		result := &PublicArticleListResult{ID: item.Article.ID, Locale: item.Locale, Title: item.Title, Slug: item.Slug, Summary: item.Summary, ContentFormat: item.ContentFormat, PublishedAt: item.PublishedAt, Cover: coverFor(item.Article.CoverMediaID, covers), UpdatedAt: item.ArticleTranslation.UpdatedAt}
 		if item.PrimaryCategoryID != nil {
 			result.PrimaryCategory = &PublicCategoryRef{ID: *item.PrimaryCategoryID, Name: item.PrimaryCategoryName, Slug: item.PrimaryCategorySlug}
 		}
 		results = append(results, result)
 	}
 	return results, shared.PageResult{Page: page.Page, PerPage: page.PerPage, Total: total}, nil
+}
+func articleCoverIDs(items []*domainCMS.PublicArticleListItem) []uint {
+	ids := make([]uint, 0, len(items))
+	for _, item := range items {
+		if item.Article.CoverMediaID != nil {
+			ids = append(ids, *item.Article.CoverMediaID)
+		}
+	}
+	return ids
+}
+
+func (s *Service) publicCovers(ctx context.Context, locale string, ids []uint) (map[uint]*CoverMediaResult, error) {
+	result := make(map[uint]*CoverMediaResult)
+	if s.publicMediaFinder == nil {
+		return result, nil
+	}
+	assets, err := s.publicMediaFinder.ListPublic(ctx, locale, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, asset := range assets {
+		result[asset.ID] = &CoverMediaResult{ID: asset.ID, URL: asset.URL, AltText: asset.AltText, Title: asset.Title}
+	}
+	return result, nil
+}
+
+func coverFor(id *uint, covers map[uint]*CoverMediaResult) *CoverMediaResult {
+	if id == nil {
+		return nil
+	}
+	return covers[*id]
 }
 func (s *Service) translation(ctx context.Context, id uint, locale string) (*domainCMS.ArticleTranslation, error) {
 	if id == 0 || strings.TrimSpace(locale) == "" {

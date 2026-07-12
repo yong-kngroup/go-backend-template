@@ -37,6 +37,24 @@ func (s *Service) IsReady(ctx context.Context, id uint) (bool, error) {
 	return err == nil, err
 }
 
+func (s *Service) ListPublic(ctx context.Context, locale string, ids []uint) ([]domainMedia.PublicAsset, error) {
+	if len(ids) == 0 || s.storage == nil {
+		return []domainMedia.PublicAsset{}, nil
+	}
+	assets, err := s.repo.ListReadyPublic(ctx, locale, ids)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domainMedia.PublicAsset, 0, len(assets))
+	for _, asset := range assets {
+		asset.URL = strings.TrimSpace(s.storage.PublicURL(asset.ObjectKey))
+		if asset.URL != "" {
+			result = append(result, asset)
+		}
+	}
+	return result, nil
+}
+
 func New(tx shared.TxManager, repo *media.Repository, storage domainMedia.Storage) *Service {
 	return &Service{tx: tx, repo: repo, storage: storage}
 }

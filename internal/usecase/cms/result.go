@@ -74,6 +74,7 @@ type PublicArticleResult struct {
 	SEOTitle         string              `json:"seo_title"`
 	SEODescription   string              `json:"seo_description"`
 	CanonicalURL     string              `json:"canonical_url"`
+	Cover            *CoverMediaResult   `json:"cover,omitempty"`
 	UpdatedAt        time.Time           `json:"updated_at"`
 	AvailableLocales []PublicLocaleRef   `json:"available_locales"`
 	PrimaryCategory  *PublicCategoryRef  `json:"primary_category,omitempty"`
@@ -92,7 +93,14 @@ type PublicArticleListResult struct {
 	ContentFormat   string             `json:"content_format"`
 	PublishedAt     *time.Time         `json:"published_at"`
 	UpdatedAt       time.Time          `json:"updated_at"`
+	Cover           *CoverMediaResult  `json:"cover,omitempty"`
 	PrimaryCategory *PublicCategoryRef `json:"primary_category,omitempty"`
+}
+type CoverMediaResult struct {
+	ID      uint   `json:"id"`
+	URL     string `json:"url"`
+	AltText string `json:"alt_text"`
+	Title   string `json:"title"`
 }
 type PublicCategoryRef struct {
 	ID   uint   `json:"id"`

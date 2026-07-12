@@ -10,6 +10,7 @@ type Storage interface {
 	ObjectKey(name string) string
 	PresignUpload(ctx context.Context, key, contentType string) (*PresignedUpload, error)
 	HeadObject(ctx context.Context, key string) (*ObjectInfo, error)
+	PublicURL(key string) string
 }
 
 type PresignedUpload struct {
@@ -21,4 +22,12 @@ type PresignedUpload struct {
 type ObjectInfo struct {
 	ContentType string
 	Size        int64
+}
+
+type PublicAsset struct {
+	ID        uint
+	ObjectKey string
+	URL       string
+	AltText   string
+	Title     string
 }

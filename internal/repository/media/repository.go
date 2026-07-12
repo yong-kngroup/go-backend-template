@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	domainMedia "github.com/freeDog-wy/go-backend-template/internal/domain/media"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
 	model "github.com/freeDog-wy/go-backend-template/internal/model/media"
@@ -51,6 +52,32 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]model.Asset
 		return nil, 0, err
 	}
 	return assets, total, nil
+}
+
+func (r *Repository) ListReadyPublic(ctx context.Context, locale string, ids []uint) ([]domainMedia.PublicAsset, error) {
+	if len(ids) == 0 {
+		return []domainMedia.PublicAsset{}, nil
+	}
+	type row struct {
+		ID        uint
+		ObjectKey string
+		AltText   string
+		Title     string
+	}
+	var rows []row
+	err := database.DB(ctx, r.db).Table("media_assets").
+		Select("media_assets.id, media_assets.object_key, COALESCE(media_translations.alt_text, '') AS alt_text, COALESCE(media_translations.title, '') AS title").
+		Joins("LEFT JOIN media_translations ON media_translations.media_id = media_assets.id AND media_translations.locale = ?", locale).
+		Where("media_assets.id IN ? AND media_assets.status = 'ready' AND media_assets.deleted_at IS NULL", ids).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	assets := make([]domainMedia.PublicAsset, 0, len(rows))
+	for _, row := range rows {
+		assets = append(assets, domainMedia.PublicAsset{ID: row.ID, ObjectKey: row.ObjectKey, AltText: row.AltText, Title: row.Title})
+	}
+	return assets, nil
 }
 func (r *Repository) UpsertTranslation(ctx context.Context, t *model.Translation) error {
 	return database.DB(ctx, r.db).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "media_id"}, {Name: "locale"}}, DoUpdates: clause.Assignments(map[string]any{"alt_text": t.AltText, "title": t.Title, "updated_at": time.Now()})}).Create(t).Error
