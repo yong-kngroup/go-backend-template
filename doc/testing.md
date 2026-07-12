@@ -72,7 +72,11 @@ make test-kafka-integration
 
 ## CI
 
-CI 应启动独立 PostgreSQL 和 Redis 服务，并注入 `TEST_DATABASE_DSN`、`TEST_REDIS_ADDR`、`TEST_REDIS_DB`，随后执行：
+GitHub Actions 在 PR 与 `main` 提交时依次执行单元测试、静态检查、四个进程镜像构建和真实基础设施集成测试。CI 仅启动 PostgreSQL、Redis、Kafka，并通过 Compose healthcheck 等待依赖就绪；Jaeger 不参与 CI。
+
+镜像只在 CI 中构建验证，不推送到镜像仓库。模板 tag 的镜像发布流程将在后续单独添加。
+
+CI 应启动独立 PostgreSQL、Redis 和 Kafka 服务，并注入 `TEST_DATABASE_DSN`、`TEST_REDIS_ADDR`、`TEST_REDIS_DB`、`TEST_KAFKA_BROKERS`，随后执行：
 
 ```bash
 make test-ci

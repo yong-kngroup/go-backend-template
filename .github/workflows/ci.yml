@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Unit tests
+        run: go test ./...
+
+      - name: Static analysis
+        run: go vet ./...
+
+      - name: Build executables
+        run: go build -buildvcs=false ./cmd/server ./cmd/worker ./cmd/cron ./cmd/migrate
+
+      - name: Build container images
+        run: make docker-build IMAGE_TAG=ci-${{ github.sha }}
+
+      - name: Start integration dependencies
+        run: docker compose -f deploy/docker-compose.yml up -d --wait --wait-timeout 120 postgres redis kafka
+
+      - name: Integration tests
+        env:
+          TEST_DATABASE_DSN: host=localhost user=postgres password=postgres dbname=go_backend port=5432 sslmode=disable TimeZone=UTC
+          TEST_REDIS_ADDR: localhost:6379
+          TEST_REDIS_PASSWORD: ""
+          TEST_REDIS_DB: "15"
+          TEST_KAFKA_BROKERS: localhost:9092
+          TRACING_ENDPOINT: ""
+        run: make test-integration
+
+      - name: Dependency logs
+        if: failure()
+        run: docker compose -f deploy/docker-compose.yml logs --no-color
+
+      - name: Stop integration dependencies
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml down -v --remove-orphans
