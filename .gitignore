@@ -1,6 +1,7 @@
 # === Build output ===
 build/
 *.exe
+.gocache/
 
 # === IDE ===
 .idea/

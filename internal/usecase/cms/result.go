@@ -52,6 +52,16 @@ type ArticleDetailResult struct {
 	Categories     []ArticleCategoryResult `json:"categories"`
 	Tags           []TagResult             `json:"tags"`
 }
+type PublishPreviewResult struct {
+	Publishable bool           `json:"publishable"`
+	Article     *ArticleResult `json:"article"`
+	Checks      []PublishCheck `json:"checks"`
+}
+type PublishCheck struct {
+	Name    string `json:"name"`
+	Passed  bool   `json:"passed"`
+	Message string `json:"message,omitempty"`
+}
 type TagResult struct {
 	ID     uint   `json:"id"`
 	Locale string `json:"locale"`

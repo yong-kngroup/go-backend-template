@@ -483,6 +483,27 @@ func (s *Service) PublishTranslation(ctx context.Context, cmd PublishTranslation
 	}
 	return articleResult(cmd.ArticleID, tr), nil
 }
+func (s *Service) PreviewPublish(ctx context.Context, cmd PreviewPublishCmd) (*PublishPreviewResult, error) {
+	tr, err := s.translation(ctx, cmd.ArticleID, cmd.Locale)
+	if err != nil {
+		return nil, err
+	}
+	article, err := s.repo.FindArticle(ctx, cmd.ArticleID)
+	if err != nil {
+		return nil, mapArticle(err)
+	}
+	checks := []PublishCheck{
+		{Name: "title", Passed: strings.TrimSpace(tr.Title) != "", Message: "title is required"},
+		{Name: "slug", Passed: strings.TrimSpace(tr.Slug) != "", Message: "slug is required"},
+		{Name: "content_format", Passed: tr.ContentFormat == "markdown" || tr.ContentFormat == "html", Message: "content_format must be markdown or html"},
+		{Name: "article_active", Passed: article.DeletedAt == nil, Message: "article is deleted"},
+	}
+	publishable := true
+	for _, check := range checks {
+		publishable = publishable && check.Passed
+	}
+	return &PublishPreviewResult{Publishable: publishable, Article: articleResult(cmd.ArticleID, tr), Checks: checks}, nil
+}
 func (s *Service) ArchiveTranslation(ctx context.Context, cmd ArchiveTranslationCmd) (*ArticleResult, error) {
 	tr, err := s.translation(ctx, cmd.ArticleID, cmd.Locale)
 	if err != nil {

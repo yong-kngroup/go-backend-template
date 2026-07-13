@@ -1,7 +1,10 @@
 package mcpclient
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +13,18 @@ import (
 	"strconv"
 	"strings"
 )
+
+type ArticleInput struct {
+	Locale         string `json:"locale"`
+	Title          string `json:"title"`
+	Slug           string `json:"slug"`
+	Summary        string `json:"summary,omitempty"`
+	Content        string `json:"content,omitempty"`
+	ContentFormat  string `json:"content_format,omitempty"`
+	SEOTitle       string `json:"seo_title,omitempty"`
+	SEODescription string `json:"seo_description,omitempty"`
+	CanonicalURL   string `json:"canonical_url,omitempty"`
+}
 
 type TokenProvider interface {
 	Token(context.Context) (string, error)
@@ -80,6 +95,30 @@ func (c *Client) ArticleTranslation(ctx context.Context, articleID uint, locale 
 	return c.getAdmin(ctx, "/api/v1/admin/cms/articles/"+strconv.FormatUint(uint64(articleID), 10)+"/translations/"+url.PathEscape(locale), nil)
 }
 
+func (c *Client) CreateArticleDraft(ctx context.Context, input ArticleInput) (json.RawMessage, error) {
+	return c.write(ctx, http.MethodPost, "/api/v1/admin/cms/articles", input)
+}
+
+func (c *Client) UpdateArticleTranslation(ctx context.Context, articleID uint, locale string, input ArticleInput) (json.RawMessage, error) {
+	return c.write(ctx, http.MethodPut, "/api/v1/admin/cms/articles/"+strconv.FormatUint(uint64(articleID), 10)+"/translations/"+url.PathEscape(locale), input)
+}
+
+func (c *Client) ReplaceArticleCategories(ctx context.Context, articleID uint, categoryIDs []uint, primaryCategoryID *uint) (json.RawMessage, error) {
+	return c.write(ctx, http.MethodPut, "/api/v1/admin/cms/articles/"+strconv.FormatUint(uint64(articleID), 10)+"/categories", map[string]any{"category_ids": categoryIDs, "primary_category_id": primaryCategoryID})
+}
+
+func (c *Client) ReplaceArticleTags(ctx context.Context, articleID uint, tagIDs []uint) (json.RawMessage, error) {
+	return c.write(ctx, http.MethodPut, "/api/v1/admin/cms/articles/"+strconv.FormatUint(uint64(articleID), 10)+"/tags", map[string]any{"tag_ids": tagIDs})
+}
+
+func (c *Client) PreviewPublish(ctx context.Context, articleID uint, locale string) (json.RawMessage, error) {
+	return c.getAdmin(ctx, "/api/v1/admin/cms/articles/"+strconv.FormatUint(uint64(articleID), 10)+"/translations/"+url.PathEscape(locale)+"/publish-preview", nil)
+}
+
+func (c *Client) PublishArticleTranslation(ctx context.Context, articleID uint, locale string) (json.RawMessage, error) {
+	return c.write(ctx, http.MethodPost, "/api/v1/admin/cms/articles/"+strconv.FormatUint(uint64(articleID), 10)+"/translations/"+url.PathEscape(locale)+"/publish", nil)
+}
+
 func pageQuery(locale string, page, perPage int) url.Values {
 	values := url.Values{"locale": {locale}}
 	if page > 0 {
@@ -109,8 +148,26 @@ func (c *Client) request(ctx context.Context, path string, query url.Values, aut
 	if err != nil {
 		return nil, err
 	}
+	return c.do(req, auth)
+}
+
+func (c *Client) write(ctx context.Context, method, path string, payload any) (json.RawMessage, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode CMS request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Correlation-ID", correlationID())
+	return c.do(req, true)
+}
+
+func (c *Client) do(req *http.Request, auth bool) (json.RawMessage, error) {
 	if auth {
-		token, err := c.tokens.Token(ctx)
+		token, err := c.tokens.Token(req.Context())
 		if err != nil {
 			return nil, err
 		}
@@ -153,4 +210,12 @@ func (c *Client) request(ctx context.Context, path string, query url.Values, aut
 		return envelope.Data, nil
 	}
 	return json.Marshal(map[string]json.RawMessage{"data": envelope.Data, "meta": envelope.Meta})
+}
+
+func correlationID() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "mcp"
+	}
+	return hex.EncodeToString(buf)
 }

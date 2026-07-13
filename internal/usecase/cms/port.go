@@ -21,6 +21,7 @@ type AdminService interface {
 	CreateTranslation(context.Context, CreateTranslationCmd) (*ArticleResult, error)
 	UpdateTranslation(context.Context, UpdateTranslationCmd) (*ArticleResult, error)
 	PublishTranslation(context.Context, PublishTranslationCmd) (*ArticleResult, error)
+	PreviewPublish(context.Context, PreviewPublishCmd) (*PublishPreviewResult, error)
 	ArchiveTranslation(context.Context, ArchiveTranslationCmd) (*ArticleResult, error)
 	DeleteArticle(context.Context, DeleteArticleCmd) error
 	RestoreArticle(context.Context, RestoreArticleCmd) error

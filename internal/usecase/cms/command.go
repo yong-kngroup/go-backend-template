@@ -34,6 +34,10 @@ type PublishTranslationCmd struct {
 	ActorUserID   uint
 	IP, UserAgent string
 }
+type PreviewPublishCmd struct {
+	ArticleID uint
+	Locale    string
+}
 type ArchiveTranslationCmd struct {
 	ArticleID     uint
 	Locale        string

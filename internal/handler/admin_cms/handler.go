@@ -44,6 +44,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	g.PUT("/articles/:id/cover", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.SetArticleCover)
 	g.POST("/articles/:id/translations", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.CreateTranslation)
 	g.PUT("/articles/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.UpdateTranslation)
+	g.GET("/articles/:id/translations/:locale/publish-preview", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.publish"), h.PreviewPublish)
 	g.POST("/articles/:id/translations/:locale/publish", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.publish"), h.PublishTranslation)
 	g.POST("/articles/:id/translations/:locale/archive", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.archive"), h.ArchiveTranslation)
 }
@@ -414,6 +415,18 @@ func (h *Handler) UpdateTranslation(c *gin.Context) {
 	}
 	meta := handler.AuditMetaFromRequest(c)
 	result, err := h.cms.UpdateTranslation(c, svcCMS.UpdateTranslationCmd{ArticleID: id, Locale: c.Param("locale"), Title: req.Title, Slug: req.Slug, Summary: req.Summary, Content: req.Content, ContentFormat: req.ContentFormat, SEOTitle: req.SEOTitle, SEODescription: req.SEODescription, CanonicalURL: req.CanonicalURL, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent})
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	handler.OK(c, result)
+}
+func (h *Handler) PreviewPublish(c *gin.Context) {
+	id, ok := idParam(c)
+	if !ok {
+		return
+	}
+	result, err := h.cms.PreviewPublish(c, svcCMS.PreviewPublishCmd{ArticleID: id, Locale: c.Param("locale")})
 	if err != nil {
 		fail(c, err)
 		return

@@ -134,6 +134,9 @@ func (*cmsServiceFake) UpdateTranslation(context.Context, svcCMS.UpdateTranslati
 func (*cmsServiceFake) PublishTranslation(context.Context, svcCMS.PublishTranslationCmd) (*svcCMS.ArticleResult, error) {
 	return nil, nil
 }
+func (*cmsServiceFake) PreviewPublish(context.Context, svcCMS.PreviewPublishCmd) (*svcCMS.PublishPreviewResult, error) {
+	return nil, nil
+}
 func (*cmsServiceFake) ArchiveTranslation(context.Context, svcCMS.ArchiveTranslationCmd) (*svcCMS.ArticleResult, error) {
 	return nil, nil
 }
