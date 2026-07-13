@@ -19,10 +19,11 @@ type Provider struct {
 	expiresAt                       time.Time
 }
 
-func New(baseURL, clientID, clientSecret string, httpClient *http.Client) (*Provider, error) {
+func New(baseURL, clientID, clientSecret string, httpClient *http.Client, allowInsecureHTTP bool) (*Provider, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	u, err := url.Parse(baseURL)
-	if baseURL == "" || err != nil || u.Scheme != "https" || u.Host == "" || strings.TrimSpace(clientID) == "" || strings.TrimSpace(clientSecret) == "" || httpClient == nil {
+	validScheme := u != nil && (u.Scheme == "https" || (allowInsecureHTTP && u.Scheme == "http"))
+	if baseURL == "" || err != nil || !validScheme || u.Host == "" || strings.TrimSpace(clientID) == "" || strings.TrimSpace(clientSecret) == "" || httpClient == nil {
 		return nil, fmt.Errorf("mcp cms base URL and service credentials are required")
 	}
 	return &Provider{baseURL: baseURL, clientID: clientID, clientSecret: clientSecret, httpClient: httpClient}, nil

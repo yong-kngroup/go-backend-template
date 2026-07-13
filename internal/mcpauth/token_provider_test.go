@@ -23,7 +23,7 @@ func TestProviderCachesTokenUntilRefreshWindow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider, err := New(server.URL, "client", "secret", server.Client())
+	provider, err := New(server.URL, "client", "secret", server.Client(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,13 @@ func TestProviderCachesTokenUntilRefreshWindow(t *testing.T) {
 }
 
 func TestProviderRejectsInsecureURL(t *testing.T) {
-	if _, err := New("http://cms.example", "client", "secret", http.DefaultClient); err == nil {
+	if _, err := New("http://cms.example", "client", "secret", http.DefaultClient, false); err == nil {
 		t.Fatal("New() expected error for HTTP URL")
+	}
+}
+
+func TestProviderAllowsInsecureURLInDevelopment(t *testing.T) {
+	if _, err := New("http://cms.example", "client", "secret", http.DefaultClient, true); err != nil {
+		t.Fatalf("New() error = %v, want nil", err)
 	}
 }

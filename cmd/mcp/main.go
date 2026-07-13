@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -32,11 +33,12 @@ func main() {
 	}
 
 	httpClient := &http.Client{Timeout: time.Duration(cfg.MCP.RequestTimeoutSeconds) * time.Second}
-	provider, err := mcpauth.New(cfg.MCP.CMSBaseURL, cfg.MCP.ClientID, cfg.MCP.ClientSecret, httpClient)
+	allowInsecureHTTP := strings.EqualFold(strings.TrimSpace(cfg.App.Mode), "development")
+	provider, err := mcpauth.New(cfg.MCP.CMSBaseURL, cfg.MCP.ClientID, cfg.MCP.ClientSecret, httpClient, allowInsecureHTTP)
 	if err != nil {
 		log.Fatalf("initialize service token provider: %v", err)
 	}
-	client, err := mcpclient.New(cfg.MCP.CMSBaseURL, httpClient, provider)
+	client, err := mcpclient.New(cfg.MCP.CMSBaseURL, httpClient, provider, allowInsecureHTTP)
 	if err != nil {
 		log.Fatalf("initialize CMS client: %v", err)
 	}

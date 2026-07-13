@@ -36,8 +36,8 @@ func TestMigrationsApplyInitialSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migration version: %v", err)
 	}
-	if version != 9 || dirty {
-		t.Fatalf("migration version = (%d, dirty=%t), want (9, false)", version, dirty)
+	if version != 10 || dirty {
+		t.Fatalf("migration version = (%d, dirty=%t), want (10, false)", version, dirty)
 	}
 
 	for _, table := range initialTables {
@@ -45,6 +45,7 @@ func TestMigrationsApplyInitialSchema(t *testing.T) {
 			t.Fatalf("table %q was not created", table)
 		}
 	}
+	assertMCPServiceAccountSchema(t, sqlDB)
 
 	if err := migrator.Down(); err != nil {
 		t.Fatalf("apply down migrations: %v", err)
@@ -79,6 +80,69 @@ var initialTables = []string{
 	"article_translations",
 	"article_categories",
 	"tags", "tag_translations", "article_tags", "url_redirects", "media_assets", "media_translations",
+	"mcp_service_accounts",
+}
+
+func assertMCPServiceAccountSchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	for _, column := range []string{
+		"id",
+		"user_id",
+		"client_id",
+		"client_secret_hash",
+		"previous_client_secret_hash",
+		"previous_secret_expires_at",
+		"enabled",
+		"disabled_at",
+		"created_at",
+		"updated_at",
+	} {
+		var exists bool
+		if err := db.QueryRow(`
+			SELECT EXISTS (
+				SELECT 1
+				FROM pg_attribute
+				WHERE attrelid = 'mcp_service_accounts'::regclass
+					AND attname = $1
+					AND attnum > 0
+					AND NOT attisdropped
+			)
+		`, column).Scan(&exists); err != nil {
+			t.Fatalf("check mcp_service_accounts.%s: %v", column, err)
+		}
+		if !exists {
+			t.Fatalf("mcp_service_accounts column %q was not created", column)
+		}
+	}
+
+	for _, constraint := range []string{"uk_mcp_service_accounts_user_id", "uk_mcp_service_accounts_client_id"} {
+		var exists bool
+		if err := db.QueryRow(`
+			SELECT EXISTS (
+				SELECT 1
+				FROM pg_constraint
+				WHERE conrelid = 'mcp_service_accounts'::regclass AND conname = $1
+			)
+		`, constraint).Scan(&exists); err != nil {
+			t.Fatalf("check mcp service account constraint %q: %v", constraint, err)
+		}
+		if !exists {
+			t.Fatalf("mcp service account constraint %q was not created", constraint)
+		}
+	}
+
+	var deleteType string
+	if err := db.QueryRow(`
+		SELECT confdeltype
+		FROM pg_constraint
+		WHERE conrelid = 'mcp_service_accounts'::regclass AND contype = 'f'
+	`).Scan(&deleteType); err != nil {
+		t.Fatalf("check mcp service account foreign key: %v", err)
+	}
+	if deleteType != "c" {
+		t.Fatalf("mcp service account foreign key delete type = %q, want c (CASCADE)", deleteType)
+	}
 }
 
 func tableExists(t *testing.T, db *sql.DB, table string) bool {

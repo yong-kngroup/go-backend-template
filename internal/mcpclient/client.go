@@ -28,10 +28,11 @@ type APIError struct {
 
 func (e *APIError) Error() string { return e.Code + ": " + e.Message }
 
-func New(baseURL string, httpClient *http.Client, tokens TokenProvider) (*Client, error) {
+func New(baseURL string, httpClient *http.Client, tokens TokenProvider, allowInsecureHTTP bool) (*Client, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	u, err := url.Parse(baseURL)
-	if err != nil || u.Scheme != "https" || u.Host == "" {
+	validScheme := u != nil && (u.Scheme == "https" || (allowInsecureHTTP && u.Scheme == "http"))
+	if err != nil || !validScheme || u.Host == "" {
 		return nil, fmt.Errorf("cms base URL must be an HTTPS URL")
 	}
 	if httpClient == nil || tokens == nil {

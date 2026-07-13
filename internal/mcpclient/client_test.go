@@ -16,7 +16,7 @@ func TestClientReturnsCMSBusinessError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(server.URL, server.Client(), tokenProviderStub{})
+	client, err := New(server.URL, server.Client(), tokenProviderStub{}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,8 +28,14 @@ func TestClientReturnsCMSBusinessError(t *testing.T) {
 }
 
 func TestClientRejectsInsecureURL(t *testing.T) {
-	if _, err := New("http://cms.example", http.DefaultClient, tokenProviderStub{}); err == nil {
+	if _, err := New("http://cms.example", http.DefaultClient, tokenProviderStub{}, false); err == nil {
 		t.Fatal("New() expected error for HTTP URL")
+	}
+}
+
+func TestClientAllowsInsecureURLInDevelopment(t *testing.T) {
+	if _, err := New("http://cms.example", http.DefaultClient, tokenProviderStub{}, true); err != nil {
+		t.Fatalf("New() error = %v, want nil", err)
 	}
 }
 

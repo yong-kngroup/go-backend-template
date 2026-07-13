@@ -19,6 +19,10 @@ type ServiceAccount struct {
 	UpdatedAt                time.Time `gorm:"not null"`
 }
 
+func (ServiceAccount) TableName() string {
+	return "mcp_service_accounts"
+}
+
 func (a *ServiceAccount) ToEntity() *domainMCP.ServiceAccount {
 	return domainMCP.ReconstituteServiceAccount(a.ID, a.UserID, a.ClientID, a.ClientSecretHash, a.PreviousClientSecretHash, a.PreviousSecretExpiresAt, a.Enabled, a.DisabledAt, a.CreatedAt, a.UpdatedAt)
 }
