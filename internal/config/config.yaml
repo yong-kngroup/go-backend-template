@@ -54,11 +54,11 @@ auth:
 
 email:
   mode: "log"
-  smtp_host: "smtp.qiye.aliyun.com"
+  smtp_host: "smtp.example.com"
   smtp_port: 465
-  smtp_user: "godfree@elseif.site"
+  smtp_user: "developer@example.com"
   smtp_password: ""
-  from_address: "godfree@elseif.site"
+  from_address: "developer@example.com"
   site_base_url: "http://localhost:5173"
 
 tracing:
