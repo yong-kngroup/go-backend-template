@@ -26,6 +26,7 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/infra/cache"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/crypto"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/idempotency"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	InfraOutbox "github.com/freeDog-wy/go-backend-template/internal/infra/outbox"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/storage"
@@ -109,6 +110,7 @@ func initApp(cfg *config.Config) (*App, error) {
 	cmsRepo := RepoCMS.New(db)
 	mediaRepo := RepoMedia.New(db)
 	mcpServiceAccountRepo := RepoMCP.NewServiceAccountRepository(db)
+	idempotencyStore := idempotency.New(db)
 
 	pwdHasher := crypto.NewBcryptHasher(0)
 	eventBus := InfraOutbox.NewEventBus(outboxRepo)
@@ -213,6 +215,7 @@ func initApp(cfg *config.Config) (*App, error) {
 	adminUserHdl := HdlAdminUser.New(authSvc, authorizationSvc, authorizationSvc, identitySvc)
 	meHdl := HdlMe.New(authSvc, authSvc, identitySvc)
 	adminCMSHdl := HdlAdminCMS.New(authSvc, authorizationSvc, cmsSvc)
+	adminCMSHdl.SetIdempotency(middleware.Idempotency(idempotencyStore))
 	adminMediaHdl := HdlAdminMedia.New(authSvc, authorizationSvc, mediaSvc)
 	publicContentHdl := HdlPublicContent.New(cmsSvc)
 

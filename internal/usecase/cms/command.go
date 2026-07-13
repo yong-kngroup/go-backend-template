@@ -17,6 +17,7 @@ type MoveCategoryCmd struct {
 type CreateArticleCmd struct {
 	AuthorUserID                                                                                 uint
 	Locale, Title, Slug, Summary, Content, ContentFormat, SEOTitle, SEODescription, CanonicalURL string
+	IP, UserAgent, CorrelationID                                                                 string
 }
 type CreateTranslationCmd struct {
 	ArticleID                                                                                    uint
@@ -26,13 +27,13 @@ type UpdateTranslationCmd struct {
 	ArticleID                                                                                    uint
 	Locale, Title, Slug, Summary, Content, ContentFormat, SEOTitle, SEODescription, CanonicalURL string
 	ActorUserID                                                                                  uint
-	IP, UserAgent                                                                                string
+	IP, UserAgent, CorrelationID                                                                 string
 }
 type PublishTranslationCmd struct {
-	ArticleID     uint
-	Locale        string
-	ActorUserID   uint
-	IP, UserAgent string
+	ArticleID                    uint
+	Locale                       string
+	ActorUserID                  uint
+	IP, UserAgent, CorrelationID string
 }
 type PreviewPublishCmd struct {
 	ArticleID uint
@@ -46,9 +47,11 @@ type ArchiveTranslationCmd struct {
 }
 type ListCategoriesCmd struct{ Locale string }
 type ReplaceArticleCategoriesCmd struct {
-	ArticleID         uint
-	CategoryIDs       []uint
-	PrimaryCategoryID *uint
+	ArticleID                    uint
+	CategoryIDs                  []uint
+	PrimaryCategoryID            *uint
+	ActorUserID                  uint
+	IP, UserAgent, CorrelationID string
 }
 type ListArticlesCmd struct {
 	Locale         string
@@ -140,10 +143,10 @@ type ListTagsCmd struct {
 	Page   shared.PageQuery
 }
 type ReplaceArticleTagsCmd struct {
-	ArticleID     uint
-	TagIDs        []uint
-	ActorUserID   uint
-	IP, UserAgent string
+	ArticleID                    uint
+	TagIDs                       []uint
+	ActorUserID                  uint
+	IP, UserAgent, CorrelationID string
 }
 type ListPublicTagArticlesCmd struct {
 	Locale, TagSlug string

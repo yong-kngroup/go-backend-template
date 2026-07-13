@@ -161,7 +161,9 @@ func (c *Client) write(ctx context.Context, method, path string, payload any) (j
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Correlation-ID", correlationID())
+	requestID := correlationID()
+	req.Header.Set("X-Correlation-ID", requestID)
+	req.Header.Set("Idempotency-Key", requestID)
 	return c.do(req, true)
 }
 

@@ -124,7 +124,7 @@ func (s *Service) ReplaceArticleTags(ctx context.Context, cmd ReplaceArticleTags
 		if err := s.repo.ReplaceArticleTags(ctx, cmd.ArticleID, cmd.TagIDs); err != nil {
 			return err
 		}
-		return s.publishAudit(ctx, cmd.ActorUserID, "article", cmd.ArticleID, domainAudit.ActionCMSArticleTagsChanged, cmd.IP, cmd.UserAgent, map[string]any{"tag_ids": cmd.TagIDs})
+		return s.publishAudit(ctx, cmd.ActorUserID, "article", cmd.ArticleID, domainAudit.ActionCMSArticleTagsChanged, cmd.IP, cmd.UserAgent, auditMetadata(map[string]any{"tag_ids": cmd.TagIDs}, cmd.CorrelationID))
 	})
 }
 func (s *Service) CreateLocale(ctx context.Context, cmd CreateLocaleCmd) (*LocaleResult, error) {
@@ -366,7 +366,12 @@ func (s *Service) CreateArticle(ctx context.Context, cmd CreateArticleCmd) (*Art
 	}
 	a := &domainCMS.Article{AuthorUserID: cmd.AuthorUserID}
 	tr := translationFromCreate(0, cmd)
-	if err := s.tx.Do(ctx, func(ctx context.Context) error { return s.repo.CreateArticle(ctx, a, tr) }); err != nil {
+	if err := s.tx.Do(ctx, func(ctx context.Context) error {
+		if err := s.repo.CreateArticle(ctx, a, tr); err != nil {
+			return err
+		}
+		return s.publishAudit(ctx, cmd.AuthorUserID, "article", a.ID, domainAudit.ActionCMSArticleCreated, cmd.IP, cmd.UserAgent, auditMetadata(map[string]any{"locale": tr.Locale, "slug": tr.Slug}, cmd.CorrelationID))
+	}); err != nil {
 		return nil, err
 	}
 	return articleResult(a.ID, tr), nil
@@ -412,9 +417,9 @@ func (s *Service) UpdateTranslation(ctx context.Context, cmd UpdateTranslationCm
 			if err := s.repo.SaveURLRedirect(ctx, redirect); err != nil {
 				return err
 			}
-			return s.publishAudit(ctx, cmd.ActorUserID, "article_translation", tr.ID, domainAudit.ActionCMSSlugChanged, cmd.IP, cmd.UserAgent, map[string]any{"article_id": cmd.ArticleID, "locale": tr.Locale, "old_slug": oldSlug, "new_slug": tr.Slug})
+			return s.publishAudit(ctx, cmd.ActorUserID, "article_translation", tr.ID, domainAudit.ActionCMSSlugChanged, cmd.IP, cmd.UserAgent, auditMetadata(map[string]any{"article_id": cmd.ArticleID, "locale": tr.Locale, "old_slug": oldSlug, "new_slug": tr.Slug}, cmd.CorrelationID))
 		}
-		return nil
+		return s.publishAudit(ctx, cmd.ActorUserID, "article_translation", tr.ID, domainAudit.ActionCMSArticleUpdated, cmd.IP, cmd.UserAgent, auditMetadata(map[string]any{"article_id": cmd.ArticleID, "locale": tr.Locale}, cmd.CorrelationID))
 	}); err != nil {
 		return nil, err
 	}
@@ -477,7 +482,7 @@ func (s *Service) PublishTranslation(ctx context.Context, cmd PublishTranslation
 		if err := s.repo.SaveArticleTranslation(ctx, tr); err != nil {
 			return err
 		}
-		return s.publishAudit(ctx, cmd.ActorUserID, "article_translation", tr.ID, domainAudit.ActionCMSArticlePublished, cmd.IP, cmd.UserAgent, map[string]any{"article_id": cmd.ArticleID, "locale": cmd.Locale})
+		return s.publishAudit(ctx, cmd.ActorUserID, "article_translation", tr.ID, domainAudit.ActionCMSArticlePublished, cmd.IP, cmd.UserAgent, auditMetadata(map[string]any{"article_id": cmd.ArticleID, "locale": cmd.Locale}, cmd.CorrelationID))
 	}); err != nil {
 		return nil, err
 	}
@@ -646,7 +651,10 @@ func (s *Service) ReplaceArticleCategories(ctx context.Context, cmd ReplaceArtic
 		}
 	}
 	return s.tx.Do(ctx, func(ctx context.Context) error {
-		return s.repo.ReplaceArticleCategories(ctx, cmd.ArticleID, ids, cmd.PrimaryCategoryID)
+		if err := s.repo.ReplaceArticleCategories(ctx, cmd.ArticleID, ids, cmd.PrimaryCategoryID); err != nil {
+			return err
+		}
+		return s.publishAudit(ctx, cmd.ActorUserID, "article", cmd.ArticleID, domainAudit.ActionCMSArticleCategoriesChanged, cmd.IP, cmd.UserAgent, auditMetadata(map[string]any{"category_ids": ids, "primary_category_id": cmd.PrimaryCategoryID}, cmd.CorrelationID))
 	})
 }
 func (s *Service) ListArticles(ctx context.Context, cmd ListArticlesCmd) ([]*ArticleResult, shared.PageResult, error) {
@@ -944,6 +952,12 @@ func (s *Service) publishAuditText(ctx context.Context, actorUserID uint, target
 		actor = &actorUserID
 	}
 	return s.eventBus.Publish(ctx, domainAudit.LogRequested{ActorUserID: actor, TargetType: targetType, TargetID: targetID, Action: action, Result: domainAudit.ResultSuccess, IP: ip, UserAgent: userAgent, Metadata: metadata})
+}
+func auditMetadata(metadata map[string]any, correlationID string) map[string]any {
+	if strings.TrimSpace(correlationID) != "" {
+		metadata["correlation_id"] = correlationID
+	}
+	return metadata
 }
 func (s *Service) ensureSlugAvailable(ctx context.Context, locale, path string) error {
 	exists, err := s.repo.RedirectSourceExists(ctx, locale, path)

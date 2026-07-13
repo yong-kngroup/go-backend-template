@@ -34,8 +34,9 @@ type PageQuery struct {
 }
 
 type RequestAuditMeta struct {
-	IP        string
-	UserAgent string
+	IP            string
+	UserAgent     string
+	CorrelationID string
 }
 
 // OK 返回成功响应（200）。
@@ -70,8 +71,9 @@ func MetaFromPageResult(result shared.PageResult) *Meta {
 
 func AuditMetaFromRequest(c *gin.Context) RequestAuditMeta {
 	return RequestAuditMeta{
-		IP:        c.ClientIP(),
-		UserAgent: c.Request.UserAgent(),
+		IP:            c.ClientIP(),
+		UserAgent:     c.Request.UserAgent(),
+		CorrelationID: c.GetHeader("X-Correlation-ID"),
 	}
 }
 

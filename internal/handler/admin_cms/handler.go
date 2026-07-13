@@ -13,13 +13,22 @@ import (
 )
 
 type Handler struct {
-	auth       svcAuth.AccessAuthenticator
-	authorizer svcAuthorization.AccessAuthorizer
-	cms        svcCMS.AdminService
+	auth        svcAuth.AccessAuthenticator
+	authorizer  svcAuthorization.AccessAuthorizer
+	cms         svcCMS.AdminService
+	idempotency gin.HandlerFunc
 }
 
 func New(auth svcAuth.AccessAuthenticator, authorizer svcAuthorization.AccessAuthorizer, cms svcCMS.AdminService) *Handler {
 	return &Handler{auth: auth, authorizer: authorizer, cms: cms}
+}
+func (h *Handler) SetIdempotency(mw gin.HandlerFunc) { h.idempotency = mw }
+func (h *Handler) writeHandlers(permission string, endpoint gin.HandlerFunc) []gin.HandlerFunc {
+	handlers := []gin.HandlerFunc{handlerMiddleware.RequirePermission(h.auth, h.authorizer, permission)}
+	if h.idempotency != nil {
+		handlers = append(handlers, h.idempotency)
+	}
+	return append(handlers, endpoint)
 }
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	g := r.Group("/api/v1/admin/cms")
@@ -34,18 +43,18 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	g.PATCH("/categories/:id/move", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.category.manage"), h.MoveCategory)
 	g.PATCH("/categories/:id", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.category.manage"), h.UpdateCategory)
 	g.PUT("/categories/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.category.manage"), h.UpsertCategoryTranslation)
-	g.POST("/articles", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.create"), h.CreateArticle)
+	g.POST("/articles", h.writeHandlers("cms.article.create", h.CreateArticle)...)
 	g.GET("/articles", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.ListArticles)
 	g.DELETE("/articles/:id", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.archive"), h.DeleteArticle)
 	g.POST("/articles/:id/restore", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.archive"), h.RestoreArticle)
 	g.GET("/articles/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.GetArticleTranslation)
-	g.PUT("/articles/:id/categories", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.ReplaceArticleCategories)
-	g.PUT("/articles/:id/tags", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.ReplaceArticleTags)
+	g.PUT("/articles/:id/categories", h.writeHandlers("cms.article.update", h.ReplaceArticleCategories)...)
+	g.PUT("/articles/:id/tags", h.writeHandlers("cms.article.update", h.ReplaceArticleTags)...)
 	g.PUT("/articles/:id/cover", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.SetArticleCover)
 	g.POST("/articles/:id/translations", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.CreateTranslation)
-	g.PUT("/articles/:id/translations/:locale", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.update"), h.UpdateTranslation)
+	g.PUT("/articles/:id/translations/:locale", h.writeHandlers("cms.article.update", h.UpdateTranslation)...)
 	g.GET("/articles/:id/translations/:locale/publish-preview", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.publish"), h.PreviewPublish)
-	g.POST("/articles/:id/translations/:locale/publish", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.publish"), h.PublishTranslation)
+	g.POST("/articles/:id/translations/:locale/publish", h.writeHandlers("cms.article.publish", h.PublishTranslation)...)
 	g.POST("/articles/:id/translations/:locale/archive", handlerMiddleware.RequirePermission(h.auth, h.authorizer, "cms.article.archive"), h.ArchiveTranslation)
 }
 
@@ -280,7 +289,8 @@ func (h *Handler) CreateArticle(c *gin.Context) {
 		invalid(c)
 		return
 	}
-	result, err := h.cms.CreateArticle(c, svcCMS.CreateArticleCmd{AuthorUserID: handlerMiddleware.CurrentUserID(c), Locale: req.Locale, Title: req.Title, Slug: req.Slug, Summary: req.Summary, Content: req.Content, ContentFormat: req.ContentFormat, SEOTitle: req.SEOTitle, SEODescription: req.SEODescription, CanonicalURL: req.CanonicalURL})
+	meta := handler.AuditMetaFromRequest(c)
+	result, err := h.cms.CreateArticle(c, svcCMS.CreateArticleCmd{AuthorUserID: handlerMiddleware.CurrentUserID(c), Locale: req.Locale, Title: req.Title, Slug: req.Slug, Summary: req.Summary, Content: req.Content, ContentFormat: req.ContentFormat, SEOTitle: req.SEOTitle, SEODescription: req.SEODescription, CanonicalURL: req.CanonicalURL, IP: meta.IP, UserAgent: meta.UserAgent, CorrelationID: meta.CorrelationID})
 	if err != nil {
 		fail(c, err)
 		return
@@ -346,7 +356,8 @@ func (h *Handler) ReplaceArticleCategories(c *gin.Context) {
 		invalid(c)
 		return
 	}
-	if err := h.cms.ReplaceArticleCategories(c, svcCMS.ReplaceArticleCategoriesCmd{ArticleID: id, CategoryIDs: req.CategoryIDs, PrimaryCategoryID: req.PrimaryCategoryID}); err != nil {
+	m := handler.AuditMetaFromRequest(c)
+	if err := h.cms.ReplaceArticleCategories(c, svcCMS.ReplaceArticleCategoriesCmd{ArticleID: id, CategoryIDs: req.CategoryIDs, PrimaryCategoryID: req.PrimaryCategoryID, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: m.IP, UserAgent: m.UserAgent, CorrelationID: m.CorrelationID}); err != nil {
 		fail(c, err)
 		return
 	}
@@ -363,7 +374,7 @@ func (h *Handler) ReplaceArticleTags(c *gin.Context) {
 		return
 	}
 	m := handler.AuditMetaFromRequest(c)
-	if e := h.cms.ReplaceArticleTags(c, svcCMS.ReplaceArticleTagsCmd{ArticleID: id, TagIDs: req.TagIDs, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: m.IP, UserAgent: m.UserAgent}); e != nil {
+	if e := h.cms.ReplaceArticleTags(c, svcCMS.ReplaceArticleTagsCmd{ArticleID: id, TagIDs: req.TagIDs, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: m.IP, UserAgent: m.UserAgent, CorrelationID: m.CorrelationID}); e != nil {
 		fail(c, e)
 		return
 	}
@@ -414,7 +425,7 @@ func (h *Handler) UpdateTranslation(c *gin.Context) {
 		return
 	}
 	meta := handler.AuditMetaFromRequest(c)
-	result, err := h.cms.UpdateTranslation(c, svcCMS.UpdateTranslationCmd{ArticleID: id, Locale: c.Param("locale"), Title: req.Title, Slug: req.Slug, Summary: req.Summary, Content: req.Content, ContentFormat: req.ContentFormat, SEOTitle: req.SEOTitle, SEODescription: req.SEODescription, CanonicalURL: req.CanonicalURL, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent})
+	result, err := h.cms.UpdateTranslation(c, svcCMS.UpdateTranslationCmd{ArticleID: id, Locale: c.Param("locale"), Title: req.Title, Slug: req.Slug, Summary: req.Summary, Content: req.Content, ContentFormat: req.ContentFormat, SEOTitle: req.SEOTitle, SEODescription: req.SEODescription, CanonicalURL: req.CanonicalURL, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent, CorrelationID: meta.CorrelationID})
 	if err != nil {
 		fail(c, err)
 		return
@@ -444,7 +455,7 @@ func (h *Handler) changeState(c *gin.Context, publish bool) {
 	var err error
 	if publish {
 		meta := handler.AuditMetaFromRequest(c)
-		result, err = h.cms.PublishTranslation(c, svcCMS.PublishTranslationCmd{ArticleID: id, Locale: c.Param("locale"), ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent})
+		result, err = h.cms.PublishTranslation(c, svcCMS.PublishTranslationCmd{ArticleID: id, Locale: c.Param("locale"), ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent, CorrelationID: meta.CorrelationID})
 	} else {
 		meta := handler.AuditMetaFromRequest(c)
 		result, err = h.cms.ArchiveTranslation(c, svcCMS.ArchiveTranslationCmd{ArticleID: id, Locale: c.Param("locale"), ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent})
