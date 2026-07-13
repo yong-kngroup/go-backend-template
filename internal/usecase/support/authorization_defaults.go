@@ -38,5 +38,5 @@ func (i *AuthorizationDefaultsInstaller) Ensure(ctx context.Context) error {
 	for _, permission := range savedPermissions {
 		permissionIDs = append(permissionIDs, permission.GetID())
 	}
-	return i.repo.ReplaceRolePermissions(ctx, role.GetID(), permissionIDs)
+	return i.repo.EnsureRolePermissions(ctx, role.GetID(), permissionIDs)
 }

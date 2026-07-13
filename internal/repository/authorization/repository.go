@@ -11,6 +11,7 @@ import (
 	modelAuthorization "github.com/freeDog-wy/go-backend-template/internal/model/authorization"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Repository struct {
@@ -189,6 +190,32 @@ func (r *Repository) ListRolePermissions(ctx context.Context, roleID uint) ([]*d
 		permissions = append(permissions, models[i].ToEntity())
 	}
 	return permissions, nil
+}
+
+func (r *Repository) EnsureRolePermissions(ctx context.Context, roleID uint, permissionIDs []uint) error {
+	if len(permissionIDs) == 0 {
+		return nil
+	}
+
+	now := time.Now()
+	records := make([]modelAuthorization.RolePermission, 0, len(permissionIDs))
+	for _, permissionID := range permissionIDs {
+		records = append(records, modelAuthorization.RolePermission{
+			RoleID:       roleID,
+			PermissionID: permissionID,
+			CreatedAt:    now,
+		})
+	}
+
+	return database.DB(ctx, r.db).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "role_id"},
+				{Name: "permission_id"},
+			},
+			DoNothing: true,
+		}).
+		Create(&records).Error
 }
 
 func (r *Repository) ReplaceRolePermissions(ctx context.Context, roleID uint, permissionIDs []uint) error {

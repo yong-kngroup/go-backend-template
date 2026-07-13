@@ -182,6 +182,9 @@ func (*identityAuthorizationRepo) FindPermissionsByCodes(context.Context, []stri
 func (*identityAuthorizationRepo) ListRolePermissions(context.Context, uint) ([]*domainAuthorization.Permission, error) {
 	return nil, nil
 }
+func (*identityAuthorizationRepo) EnsureRolePermissions(context.Context, uint, []uint) error {
+	return nil
+}
 func (*identityAuthorizationRepo) ReplaceRolePermissions(context.Context, uint, []uint) error {
 	return nil
 }

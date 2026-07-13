@@ -19,6 +19,7 @@ type Repository interface {
 	ListPermissions(ctx context.Context, page shared.PageQuery) ([]*Permission, int64, error)
 	FindPermissionsByCodes(ctx context.Context, codes []string) ([]*Permission, error)
 	ListRolePermissions(ctx context.Context, roleID uint) ([]*Permission, error)
+	EnsureRolePermissions(ctx context.Context, roleID uint, permissionIDs []uint) error
 	ReplaceRolePermissions(ctx context.Context, roleID uint, permissionIDs []uint) error
 
 	ListUserRoles(ctx context.Context, userID uint) ([]*Role, error)

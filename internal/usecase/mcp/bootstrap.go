@@ -158,7 +158,7 @@ func (s *BootstrapService) Bootstrap(ctx context.Context, cmd BootstrapCmd) erro
 		for _, permission := range permissions {
 			permissionIDs = append(permissionIDs, permission.GetID())
 		}
-		if err := s.authorizer.ReplaceRolePermissions(ctx, role.GetID(), permissionIDs); err != nil {
+		if err := s.authorizer.EnsureRolePermissions(ctx, role.GetID(), permissionIDs); err != nil {
 			return err
 		}
 		return s.authorizer.ReplaceUserRoles(ctx, user.GetID(), []uint{role.GetID()})

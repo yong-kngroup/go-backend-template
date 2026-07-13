@@ -38,8 +38,11 @@ func TestRepositoryIntegrationRoleBindings(t *testing.T) {
 	if err != nil || len(permissions) != 1 {
 		t.Fatalf("FindPermissionsByCodes() = %#v, %v", permissions, err)
 	}
-	if err := repo.ReplaceRolePermissions(context.Background(), role.GetID(), []uint{permissions[0].GetID()}); err != nil {
-		t.Fatalf("ReplaceRolePermissions() error = %v", err)
+	if err := repo.EnsureRolePermissions(context.Background(), role.GetID(), []uint{permissions[0].GetID()}); err != nil {
+		t.Fatalf("EnsureRolePermissions() error = %v", err)
+	}
+	if err := repo.EnsureRolePermissions(context.Background(), role.GetID(), []uint{permissions[0].GetID()}); err != nil {
+		t.Fatalf("EnsureRolePermissions() second call error = %v", err)
 	}
 	if err := repo.ReplaceUserRoles(context.Background(), 99, []uint{role.GetID()}); err != nil {
 		t.Fatalf("ReplaceUserRoles() error = %v", err)

@@ -43,9 +43,6 @@ func New(
 }
 
 func (s *Service) EnsureAdminAccess(ctx context.Context, userID uint) error {
-	if err := s.EnsureDefaults(ctx); err != nil {
-		return err
-	}
 	codes, err := s.repo.ListUserPermissionCodes(ctx, userID)
 	if err != nil {
 		return err
@@ -57,9 +54,6 @@ func (s *Service) EnsureAdminAccess(ctx context.Context, userID uint) error {
 }
 
 func (s *Service) HasPermission(ctx context.Context, userID uint, code string) (bool, error) {
-	if err := s.EnsureDefaults(ctx); err != nil {
-		return false, err
-	}
 	codes, err := s.repo.ListUserPermissionCodes(ctx, userID)
 	if err != nil {
 		return false, err
@@ -68,10 +62,6 @@ func (s *Service) HasPermission(ctx context.Context, userID uint, code string) (
 }
 
 func (s *Service) ListRoles(ctx context.Context, cmd ListRolesCmd) ([]*RoleResult, shared.PageResult, error) {
-	if err := s.EnsureDefaults(ctx); err != nil {
-		return nil, shared.PageResult{}, err
-	}
-
 	roles, total, err := s.repo.ListRoles(ctx, cmd.Page)
 	if err != nil {
 		return nil, shared.PageResult{}, err
@@ -168,9 +158,6 @@ func (s *Service) UpdateRole(ctx context.Context, cmd UpdateRoleCmd) (*RoleResul
 }
 
 func (s *Service) ListPermissions(ctx context.Context, cmd ListPermissionsCmd) ([]*PermissionResult, shared.PageResult, error) {
-	if err := s.EnsureDefaults(ctx); err != nil {
-		return nil, shared.PageResult{}, err
-	}
 	permissions, total, err := s.repo.ListPermissions(ctx, cmd.Page)
 	if err != nil {
 		return nil, shared.PageResult{}, err
@@ -224,9 +211,6 @@ func (s *Service) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCmd)
 }
 
 func (s *Service) ListUserRoles(ctx context.Context, userID uint) ([]*RoleResult, error) {
-	if err := s.EnsureDefaults(ctx); err != nil {
-		return nil, err
-	}
 	roles, err := s.repo.ListUserRoles(ctx, userID)
 	if err != nil {
 		return nil, err

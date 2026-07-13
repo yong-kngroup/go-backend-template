@@ -23,8 +23,8 @@ func TestEnsureAdminAccess(t *testing.T) {
 		if err := service.EnsureAdminAccess(context.Background(), 7); err != nil {
 			t.Fatalf("EnsureAdminAccess() error = %v", err)
 		}
-		if !repo.defaultsInstalled {
-			t.Fatal("default permissions were not installed")
+		if repo.defaultsInstalled {
+			t.Fatal("EnsureAdminAccess() should not install default permissions")
 		}
 	})
 
@@ -128,6 +128,7 @@ func (r *authorizationRepo) FindPermissionsByCodes(_ context.Context, codes []st
 func (*authorizationRepo) ListRolePermissions(context.Context, uint) ([]*domainAuthorization.Permission, error) {
 	return nil, nil
 }
+func (*authorizationRepo) EnsureRolePermissions(context.Context, uint, []uint) error  { return nil }
 func (*authorizationRepo) ReplaceRolePermissions(context.Context, uint, []uint) error { return nil }
 func (*authorizationRepo) ListUserRoles(context.Context, uint) ([]*domainAuthorization.Role, error) {
 	return nil, nil
