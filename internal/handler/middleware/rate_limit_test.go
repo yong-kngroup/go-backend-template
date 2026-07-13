@@ -56,20 +56,42 @@ func TestRateLimit(t *testing.T) {
 			t.Fatalf("response = %d, limiter calls = %d", response.Code, limiter.calls)
 		}
 	})
+
+	t.Run("limits service token requests by IP and client ID", func(t *testing.T) {
+		limiter := &stubRateLimiter{allowed: true}
+		router := gin.New()
+		router.Use(RateLimit(limiter, nil, true, 2, time.Minute, DefaultRateLimitPolicies))
+		router.POST("/api/v1/auth/service-token", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/service-token", nil)
+		request.RemoteAddr = "192.0.2.1:12345"
+		request.SetBasicAuth("mcp-client", "secret")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+
+		if response.Code != http.StatusNoContent || limiter.calls != 2 {
+			t.Fatalf("response = %d, limiter calls = %d", response.Code, limiter.calls)
+		}
+		if strings.Join(limiter.subjects, ",") != "ip:192.0.2.1,client:mcp-client" {
+			t.Fatalf("limiter subjects = %v", limiter.subjects)
+		}
+	})
 }
 
 type stubRateLimiter struct {
-	allowed bool
-	err     error
-	calls   int
-	scope   string
-	subject string
+	allowed  bool
+	err      error
+	calls    int
+	scope    string
+	subject  string
+	subjects []string
 }
 
 func (l *stubRateLimiter) Allow(_ context.Context, scope, subject string, _ int, _ time.Duration) (bool, error) {
 	l.calls++
 	l.scope = scope
 	l.subject = subject
+	l.subjects = append(l.subjects, subject)
 	return l.allowed, l.err
 }
 

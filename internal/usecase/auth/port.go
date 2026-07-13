@@ -19,8 +19,13 @@ type PasswordService interface {
 	ChangePassword(ctx context.Context, cmd ChangePasswordCmd) error
 }
 
+type ServiceTokenIssuer interface {
+	IssueServiceToken(ctx context.Context, cmd IssueServiceTokenCmd) (*ServiceTokenResult, error)
+}
+
 var (
 	_ AccessAuthenticator   = (*Service)(nil)
 	_ AuthenticationService = (*Service)(nil)
 	_ PasswordService       = (*Service)(nil)
+	_ ServiceTokenIssuer    = (*ServiceTokenService)(nil)
 )

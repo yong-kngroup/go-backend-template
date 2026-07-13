@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
@@ -21,6 +22,7 @@ import (
 	HdlMe "github.com/freeDog-wy/go-backend-template/internal/handler/me"
 	"github.com/freeDog-wy/go-backend-template/internal/handler/middleware"
 	HdlPublicContent "github.com/freeDog-wy/go-backend-template/internal/handler/public_content"
+	HdlServiceToken "github.com/freeDog-wy/go-backend-template/internal/handler/service_token"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/cache"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/crypto"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/database"
@@ -33,6 +35,7 @@ import (
 	RepoAuthorization "github.com/freeDog-wy/go-backend-template/internal/repository/authorization"
 	RepoCMS "github.com/freeDog-wy/go-backend-template/internal/repository/cms"
 	RepoIdentity "github.com/freeDog-wy/go-backend-template/internal/repository/identity"
+	RepoMCP "github.com/freeDog-wy/go-backend-template/internal/repository/mcp"
 	RepoMedia "github.com/freeDog-wy/go-backend-template/internal/repository/media"
 	RepoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	RepoVerification "github.com/freeDog-wy/go-backend-template/internal/repository/verification"
@@ -41,6 +44,7 @@ import (
 	SvcBootstrap "github.com/freeDog-wy/go-backend-template/internal/usecase/bootstrap"
 	SvcCMS "github.com/freeDog-wy/go-backend-template/internal/usecase/cms"
 	SvcIdentity "github.com/freeDog-wy/go-backend-template/internal/usecase/identity"
+	SvcMCP "github.com/freeDog-wy/go-backend-template/internal/usecase/mcp"
 	SvcMedia "github.com/freeDog-wy/go-backend-template/internal/usecase/media"
 	SvcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 	"github.com/freeDog-wy/go-backend-template/pkg/captcha"
@@ -104,6 +108,7 @@ func initApp(cfg *config.Config) (*App, error) {
 	verifyRepo := RepoVerification.New(db)
 	cmsRepo := RepoCMS.New(db)
 	mediaRepo := RepoMedia.New(db)
+	mcpServiceAccountRepo := RepoMCP.NewServiceAccountRepository(db)
 
 	pwdHasher := crypto.NewBcryptHasher(0)
 	eventBus := InfraOutbox.NewEventBus(outboxRepo)
@@ -112,6 +117,12 @@ func initApp(cfg *config.Config) (*App, error) {
 	tokenManager, err := infraToken.NewJWTManager(cfg.Auth.JWTIssuer, cfg.Auth.JWTAudience, cfg.Auth.JWTSecret)
 	if err != nil {
 		return nil, fmt.Errorf("initialize jwt manager: %w", err)
+	}
+	if cfg.MCP.Enabled {
+		if strings.TrimSpace(cfg.MCP.TokenAudience) == "" || cfg.MCP.AccessTokenTTLMinutes <= 0 {
+			return nil, fmt.Errorf("validate mcp configuration: token audience and positive token ttl are required")
+		}
+		tokenManager.AllowAudience(cfg.MCP.TokenAudience)
 	}
 
 	verificationSvc := SvcVerification.New(txManager, userRepo, verifyRepo, credentialRepo, pwdHasher, sessionStore, eventBus, appLogger)
@@ -161,6 +172,34 @@ func initApp(cfg *config.Config) (*App, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("bootstrap admin: %w", err)
 	}
+	var serviceTokenHdl *HdlServiceToken.Handler
+	if cfg.MCP.Enabled {
+		mcpBootstrapSvc := SvcMCP.NewBootstrapService(txManager, mcpServiceAccountRepo, userRepo, authorizationRepo, pwdHasher, sessionStore, appLogger)
+		if err := mcpBootstrapSvc.Bootstrap(context.Background(), SvcMCP.BootstrapCmd{
+			Enabled:               true,
+			Name:                  cfg.MCP.ServiceAccountName,
+			Email:                 cfg.MCP.ServiceAccountEmail,
+			ClientID:              cfg.MCP.ClientID,
+			ClientSecret:          cfg.MCP.ClientSecret,
+			RotationGrace:         time.Duration(cfg.MCP.SecretRotationGraceMinutes) * time.Minute,
+			ServiceAccountEnabled: cfg.MCP.ServiceAccountEnabled,
+		}); err != nil {
+			return nil, fmt.Errorf("bootstrap mcp service account: %w", err)
+		}
+		serviceTokenSvc := svcAuth.NewServiceTokenService(
+			mcpServiceAccountRepo,
+			userRepo,
+			sessionStore,
+			pwdHasher,
+			tokenManager,
+			eventBus,
+			appLogger,
+			cfg.Auth.JWTIssuer,
+			cfg.MCP.TokenAudience,
+			time.Duration(cfg.MCP.AccessTokenTTLMinutes)*time.Minute,
+		)
+		serviceTokenHdl = HdlServiceToken.New(serviceTokenSvc)
+	}
 
 	captchaHdl := HdlCaptcha.New(captchaGenerator)
 	healthHdl := HdlHealth.New(map[string]HdlHealth.Checker{
@@ -187,6 +226,9 @@ func initApp(cfg *config.Config) (*App, error) {
 	registry.Add(adminCMSHdl)
 	registry.Add(adminMediaHdl)
 	registry.Add(publicContentHdl)
+	if serviceTokenHdl != nil {
+		registry.Add(serviceTokenHdl)
+	}
 
 	if cfg.App.Mode == "production" {
 		gin.SetMode(gin.ReleaseMode)

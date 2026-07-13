@@ -12,3 +12,8 @@ type AccessIdentity struct {
 	UserID    uint
 	SessionID string
 }
+
+type ServiceTokenResult struct {
+	AccessToken string
+	ExpiresIn   int
+}

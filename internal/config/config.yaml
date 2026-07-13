@@ -52,6 +52,19 @@ auth:
   refresh_token_ttl_hours: 168
   login_fail_threshold: 5
 
+mcp:
+  enabled: false
+  cms_base_url: ""
+  service_account_name: "MCP Operator"
+  service_account_email: ""
+  client_id: ""
+  client_secret: ""
+  service_account_enabled: true
+  secret_rotation_grace_minutes: 60
+  token_audience: "cms-api"
+  access_token_ttl_minutes: 10
+  request_timeout_seconds: 10
+
 email:
   mode: "log"
   smtp_host: "smtp.example.com"

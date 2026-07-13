@@ -14,19 +14,22 @@ import (
 )
 
 type JWTManager struct {
-	issuer   string
-	audience string
-	secret   []byte
+	issuer              string
+	audience            string
+	additionalAudiences map[string]struct{}
+	secret              []byte
 }
 
 type jwtClaims struct {
-	Sub string `json:"sub"`
-	SID string `json:"sid"`
-	Typ string `json:"typ"`
-	Iss string `json:"iss"`
-	Aud string `json:"aud"`
-	Iat int64  `json:"iat"`
-	Exp int64  `json:"exp"`
+	Sub       string `json:"sub"`
+	SID       string `json:"sid"`
+	Typ       string `json:"typ"`
+	Iss       string `json:"iss"`
+	Aud       string `json:"aud"`
+	ActorType string `json:"actor_type,omitempty"`
+	JTI       string `json:"jti,omitempty"`
+	Iat       int64  `json:"iat"`
+	Exp       int64  `json:"exp"`
 }
 
 func NewJWTManager(issuer, audience, secret string) (*JWTManager, error) {
@@ -37,7 +40,17 @@ func NewJWTManager(issuer, audience, secret string) (*JWTManager, error) {
 	if secret == "change-me" || strings.Contains(strings.ToLower(secret), "replace-with") {
 		return nil, fmt.Errorf("jwt secret must not use an example value")
 	}
-	return &JWTManager{issuer: issuer, audience: audience, secret: []byte(secret)}, nil
+	return &JWTManager{issuer: issuer, audience: audience, additionalAudiences: make(map[string]struct{}), secret: []byte(secret)}, nil
+}
+
+// AllowAudience permits a separately scoped access-token audience to be
+// authenticated by the same CMS server. It is configured during process setup.
+func (m *JWTManager) AllowAudience(audience string) {
+	audience = strings.TrimSpace(audience)
+	if audience == "" || audience == m.audience {
+		return
+	}
+	m.additionalAudiences[audience] = struct{}{}
 }
 
 var _ domainAuth.AccessTokenManager = (*JWTManager)(nil)
@@ -56,13 +69,15 @@ func (m *JWTManager) IssueAccessToken(claims domainAuth.AccessClaims) (string, e
 	}
 
 	payloadBytes, err := json.Marshal(jwtClaims{
-		Sub: claimsSubject(claims.UserID),
-		SID: claims.SessionID,
-		Typ: claims.Type,
-		Iss: firstNonEmpty(claims.Issuer, m.issuer),
-		Aud: firstNonEmpty(claims.Audience, m.audience),
-		Iat: claims.IssuedAt.Unix(),
-		Exp: claims.ExpiresAt.Unix(),
+		Sub:       claimsSubject(claims.UserID),
+		SID:       claims.SessionID,
+		Typ:       claims.Type,
+		Iss:       firstNonEmpty(claims.Issuer, m.issuer),
+		Aud:       firstNonEmpty(claims.Audience, m.audience),
+		ActorType: claims.ActorType,
+		JTI:       claims.TokenID,
+		Iat:       claims.IssuedAt.Unix(),
+		Exp:       claims.ExpiresAt.Unix(),
 	})
 	if err != nil {
 		return "", err
@@ -107,7 +122,9 @@ func (m *JWTManager) ParseAccessToken(token string, now time.Time) (*domainAuth.
 		return nil, domainAuth.ErrInvalidClaims
 	}
 	if m.audience != "" && payload.Aud != m.audience {
-		return nil, domainAuth.ErrInvalidClaims
+		if _, ok := m.additionalAudiences[payload.Aud]; !ok {
+			return nil, domainAuth.ErrInvalidClaims
+		}
 	}
 	if now.Unix() >= payload.Exp {
 		return nil, domainAuth.ErrInvalidClaims
@@ -124,6 +141,8 @@ func (m *JWTManager) ParseAccessToken(token string, now time.Time) (*domainAuth.
 		Type:      payload.Typ,
 		Issuer:    payload.Iss,
 		Audience:  payload.Aud,
+		ActorType: payload.ActorType,
+		TokenID:   payload.JTI,
 		IssuedAt:  time.Unix(payload.Iat, 0),
 		ExpiresAt: time.Unix(payload.Exp, 0),
 	}, nil

@@ -1,4 +1,4 @@
-.PHONY: server worker cron docker-build docker-server docker-worker docker-cron docker-migrate migrate-up migrate-down migrate-version release-prepare release-check release-tag release-push release project-branch test test-unit test-integration test-db-integration test-redis-integration test-kafka-integration test-s3-integration test-media-integration test-ci test-verbose test-auth test-mq test-support test-consumption-integration
+.PHONY: server worker cron mcp docker-build docker-server docker-worker docker-cron docker-migrate migrate-up migrate-down migrate-version release-prepare release-check release-tag release-push release project-branch test test-unit test-integration test-db-integration test-redis-integration test-kafka-integration test-s3-integration test-media-integration test-ci test-verbose test-auth test-mq test-support test-consumption-integration
 
 GO ?= go
 DOCKER ?= docker
@@ -8,7 +8,7 @@ IMAGE_TAG ?= dev
 VERSION ?=
 PROJECT ?=
 
-all: test server worker cron
+all: test server worker cron mcp
 
 ################################################################################
 ################################################################# Build commands
@@ -21,6 +21,9 @@ worker:
 
 cron:
 	$(GO) build -o build/cron.exe ./cmd/cron
+
+mcp:
+	$(GO) build -o build/mcp.exe ./cmd/mcp
 
 docker-build: docker-server docker-worker docker-cron docker-migrate
 

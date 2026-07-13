@@ -26,6 +26,21 @@ type Config struct {
 	Tracing        TracingConfig
 	BootstrapAdmin BootstrapAdminConfig `mapstructure:"bootstrap_admin"`
 	Storage        StorageConfig
+	MCP            MCPConfig
+}
+
+type MCPConfig struct {
+	Enabled                    bool
+	CMSBaseURL                 string `mapstructure:"cms_base_url"`
+	ServiceAccountName         string `mapstructure:"service_account_name"`
+	ServiceAccountEmail        string `mapstructure:"service_account_email"`
+	ClientID                   string `mapstructure:"client_id"`
+	ClientSecret               string `mapstructure:"client_secret"`
+	ServiceAccountEnabled      bool   `mapstructure:"service_account_enabled"`
+	SecretRotationGraceMinutes int    `mapstructure:"secret_rotation_grace_minutes"`
+	TokenAudience              string `mapstructure:"token_audience"`
+	AccessTokenTTLMinutes      int    `mapstructure:"access_token_ttl_minutes"`
+	RequestTimeoutSeconds      int    `mapstructure:"request_timeout_seconds"`
 }
 type StorageConfig struct{ S3 S3Config }
 type S3Config struct {
@@ -228,6 +243,13 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("storage.s3.prefix", "cms")
 	v.SetDefault("storage.s3.use_path_style", true)
 	v.SetDefault("storage.s3.presign_ttl_minutes", 15)
+	v.SetDefault("mcp.enabled", false)
+	v.SetDefault("mcp.service_account_name", "MCP Operator")
+	v.SetDefault("mcp.token_audience", "cms-api")
+	v.SetDefault("mcp.access_token_ttl_minutes", 10)
+	v.SetDefault("mcp.service_account_enabled", true)
+	v.SetDefault("mcp.secret_rotation_grace_minutes", 60)
+	v.SetDefault("mcp.request_timeout_seconds", 10)
 
 	// load config file
 	if configPath == "" {
@@ -295,4 +317,5 @@ var configEnvBindings = map[string]string{
 	"tracing.endpoint":        "TRACING_ENDPOINT",
 	"bootstrap_admin.enabled": "BOOTSTRAP_ADMIN_ENABLED", "bootstrap_admin.name": "BOOTSTRAP_ADMIN_NAME", "bootstrap_admin.email": "BOOTSTRAP_ADMIN_EMAIL", "bootstrap_admin.password": "BOOTSTRAP_ADMIN_PASSWORD",
 	"storage.s3.endpoint": "STORAGE_S3_ENDPOINT", "storage.s3.region": "STORAGE_S3_REGION", "storage.s3.access_key_id": "STORAGE_S3_ACCESS_KEY_ID", "storage.s3.secret_access_key": "STORAGE_S3_SECRET_ACCESS_KEY", "storage.s3.bucket": "STORAGE_S3_BUCKET", "storage.s3.public_base_url": "STORAGE_S3_PUBLIC_BASE_URL", "storage.s3.prefix": "STORAGE_S3_PREFIX", "storage.s3.use_path_style": "STORAGE_S3_USE_PATH_STYLE", "storage.s3.presign_ttl_minutes": "STORAGE_S3_PRESIGN_TTL_MINUTES",
+	"mcp.enabled": "MCP_ENABLED", "mcp.cms_base_url": "MCP_CMS_BASE_URL", "mcp.service_account_name": "MCP_SERVICE_ACCOUNT_NAME", "mcp.service_account_email": "MCP_SERVICE_ACCOUNT_EMAIL", "mcp.client_id": "MCP_CLIENT_ID", "mcp.client_secret": "MCP_CLIENT_SECRET", "mcp.service_account_enabled": "MCP_SERVICE_ACCOUNT_ENABLED", "mcp.secret_rotation_grace_minutes": "MCP_SECRET_ROTATION_GRACE_MINUTES", "mcp.token_audience": "MCP_TOKEN_AUDIENCE", "mcp.access_token_ttl_minutes": "MCP_ACCESS_TOKEN_TTL_MINUTES", "mcp.request_timeout_seconds": "MCP_REQUEST_TIMEOUT_SECONDS",
 }
