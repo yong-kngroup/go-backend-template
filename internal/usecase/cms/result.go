@@ -58,9 +58,10 @@ type PublishPreviewResult struct {
 	Checks      []PublishCheck `json:"checks"`
 }
 type PublishCheck struct {
-	Name    string `json:"name"`
-	Passed  bool   `json:"passed"`
-	Message string `json:"message,omitempty"`
+	Name     string `json:"name"`
+	Passed   bool   `json:"passed"`
+	Blocking bool   `json:"blocking"`
+	Message  string `json:"message,omitempty"`
 }
 type TagResult struct {
 	ID     uint   `json:"id"`

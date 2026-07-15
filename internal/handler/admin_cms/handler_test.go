@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	domainCMS "github.com/freeDog-wy/go-backend-template/internal/domain/cms"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
 	svcAuthorization "github.com/freeDog-wy/go-backend-template/internal/usecase/authorization"
@@ -50,13 +51,23 @@ func TestSetArticleCoverClearsCover(t *testing.T) {
 	}
 }
 
+func TestPublishTranslationRejectsContentThatFailsPublicationChecks(t *testing.T) {
+	service := &cmsServiceFake{publishErr: domainCMS.ErrPublicationNotReady}
+	w := serveCMSMethod(t, http.MethodPost, true, service, "/api/v1/admin/cms/articles/7/translations/zh-CN/publish", "")
+	assertCMSResponse(t, w, false, "CONTENT_NOT_READY_FOR_PUBLICATION")
+}
+
 func serveCMS(t *testing.T, allowed bool, service *cmsServiceFake, path, body string) *httptest.ResponseRecorder {
+	return serveCMSMethod(t, http.MethodPut, allowed, service, path, body)
+}
+
+func serveCMSMethod(t *testing.T, method string, allowed bool, service *cmsServiceFake, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	New(&cmsAuthFake{}, &cmsAuthorizerFake{allowed: allowed}, service).RegisterRoutes(r)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer token")
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -94,7 +105,10 @@ func (f *cmsAuthorizerFake) HasPermission(context.Context, uint, string) (bool, 
 
 var _ svcAuthorization.AccessAuthorizer = (*cmsAuthorizerFake)(nil)
 
-type cmsServiceFake struct{ setCover svcCMS.SetArticleCoverCmd }
+type cmsServiceFake struct {
+	setCover   svcCMS.SetArticleCoverCmd
+	publishErr error
+}
 
 func (*cmsServiceFake) CreateTag(context.Context, svcCMS.CreateTagCmd) (*svcCMS.TagResult, error) {
 	return nil, nil
@@ -131,8 +145,8 @@ func (*cmsServiceFake) CreateTranslation(context.Context, svcCMS.CreateTranslati
 func (*cmsServiceFake) UpdateTranslation(context.Context, svcCMS.UpdateTranslationCmd) (*svcCMS.ArticleResult, error) {
 	return nil, nil
 }
-func (*cmsServiceFake) PublishTranslation(context.Context, svcCMS.PublishTranslationCmd) (*svcCMS.ArticleResult, error) {
-	return nil, nil
+func (f *cmsServiceFake) PublishTranslation(context.Context, svcCMS.PublishTranslationCmd) (*svcCMS.ArticleResult, error) {
+	return nil, f.publishErr
 }
 func (*cmsServiceFake) PreviewPublish(context.Context, svcCMS.PreviewPublishCmd) (*svcCMS.PublishPreviewResult, error) {
 	return nil, nil

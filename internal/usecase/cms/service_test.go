@@ -223,7 +223,7 @@ func TestMoveCategoryRejectsDescendantAsParent(t *testing.T) {
 	}
 }
 func TestPublishTranslationOnlyChangesRequestedLanguage(t *testing.T) {
-	zh := &domainCMS.ArticleTranslation{ArticleID: 1, Locale: "zh-CN", Status: domainCMS.TranslationDraft}
+	zh := &domainCMS.ArticleTranslation{ArticleID: 1, Locale: "zh-CN", Title: "Published article", Slug: "published-article", Content: "Published content", ContentFormat: "markdown", Status: domainCMS.TranslationDraft}
 	repo := &testRepo{tr: zh}
 	svc := New(testTx{}, repo)
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -234,6 +234,45 @@ func TestPublishTranslationOnlyChangesRequestedLanguage(t *testing.T) {
 	}
 	if got.Status != "published" || zh.PublishedAt == nil || !zh.PublishedAt.Equal(now) {
 		t.Fatalf("translation = %#v", zh)
+	}
+}
+
+func TestPreviewPublishSeparatesBlockingChecksFromWarnings(t *testing.T) {
+	repo := &testRepo{tr: &domainCMS.ArticleTranslation{
+		ArticleID: 1, Locale: "zh-CN", Title: "Article", Slug: "article", ContentFormat: "markdown",
+	}}
+	preview, err := New(testTx{}, repo).PreviewPublish(context.Background(), PreviewPublishCmd{ArticleID: 1, Locale: "zh-CN"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Publishable {
+		t.Fatalf("preview = %#v, want blocked publication", preview)
+	}
+	checks := make(map[string]PublishCheck, len(preview.Checks))
+	for _, check := range preview.Checks {
+		checks[check.Name] = check
+	}
+	if content := checks["content"]; content.Passed || !content.Blocking {
+		t.Fatalf("content check = %#v, want failed blocking check", content)
+	}
+	if seoTitle := checks["seo_title"]; seoTitle.Passed || seoTitle.Blocking {
+		t.Fatalf("seo title check = %#v, want failed warning", seoTitle)
+	}
+}
+
+func TestPublishTranslationRejectsFailedPublicationChecks(t *testing.T) {
+	translation := &domainCMS.ArticleTranslation{ArticleID: 1, Locale: "zh-CN", Title: "Article", Slug: "article", ContentFormat: "markdown", Status: domainCMS.TranslationDraft}
+	repo := &testRepo{tr: translation}
+	bus := &recordingEventBus{}
+	_, err := New(testTx{}, repo, bus).PublishTranslation(context.Background(), PublishTranslationCmd{ArticleID: 1, Locale: "zh-CN"})
+	if !errors.Is(err, domainCMS.ErrPublicationNotReady) {
+		t.Fatalf("error = %v, want publication not ready", err)
+	}
+	if translation.Status != domainCMS.TranslationDraft || translation.PublishedAt != nil {
+		t.Fatalf("translation mutated after rejected publication: %#v", translation)
+	}
+	if len(bus.events) != 0 {
+		t.Fatalf("events = %#v, want no audit event", bus.events)
 	}
 }
 func TestGetPublishedArticleHidesAbsentTranslation(t *testing.T) {

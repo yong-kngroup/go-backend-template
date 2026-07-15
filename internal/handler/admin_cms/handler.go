@@ -501,6 +501,8 @@ func fail(c *gin.Context, err error) {
 		handler.Fail(c, "SLUG_RESERVED", "slug is reserved by a redirect")
 	case errors.Is(err, domainCMS.ErrTagNotFound):
 		handler.Fail(c, "TAG_NOT_FOUND", "tag not found")
+	case errors.Is(err, domainCMS.ErrPublicationNotReady):
+		handler.Fail(c, "CONTENT_NOT_READY_FOR_PUBLICATION", "content did not pass publication checks")
 	default:
 		handler.Fail(c, "INTERNAL_ERROR", err.Error())
 	}
