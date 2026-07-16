@@ -31,7 +31,7 @@ jobs:
         run: go vet ./...
 
       - name: Build executables
-        run: go build -buildvcs=false ./cmd/server ./cmd/worker ./cmd/cron ./cmd/migrate
+        run: go build -buildvcs=false ./cmd/server ./cmd/worker ./cmd/cron ./cmd/migrate ./cmd/mcp
 
       - name: Build container images
         run: make docker-build IMAGE_TAG=ci-${{ github.sha }}
