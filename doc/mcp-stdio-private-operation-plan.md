@@ -117,7 +117,7 @@ Codex 只负责将已存在的环境变量白名单传入 MCP 进程：
 [mcp_servers.cms]
 command = "/absolute/path/to/cms-mcp"
 cwd = "/absolute/path/to/go-backend-template"
-env = { CMS_BASE_URL = "https://cms.example.internal" }
+env = { CMS_BASE_URL = "https://cms.example.internal", CMS_REQUEST_TIMEOUT_SECONDS = "10" }
 env_vars = ["CMS_MCP_CLIENT_ID", "CMS_MCP_CLIENT_SECRET"]
 default_tools_approval_mode = "writes"
 ```
@@ -149,17 +149,19 @@ HTTP 200 + success=true  -> 成功
 
 ### 4.2 配置
 
-建议在统一配置中增加 `mcp` 节点；加载只负责解析和默认值，`cmd/mcp` 装配时调用 `Validate`：
+`cmd/mcp` 不加载 server、worker 或 cron 的统一应用配置，也不读取项目 `.env`。它只接受可选的 MCP 专用 YAML；仓库示例位于 `configs/mcp.example.yaml`：
 
 ```yaml
-mcp:
-  cms_base_url: https://cms.example.internal
-  request_timeout: 10s
-  token_refresh_before: 2m
-  service_token_ttl: 15m # CMS 实际签发上限，MCP 仅用于本地校验
+cms_base_url: https://cms.example.internal
+request_timeout_seconds: 10
+allow_insecure_http: false
 ```
 
-敏感的 client ID/secret 由环境变量覆盖，不写入 YAML。校验至少包括 HTTPS URL、超时为正数、刷新窗口小于 token TTL，以及两个机器凭证均已提供。
+生产环境必须使用 HTTPS；`allow_insecure_http` 仅供明确配置的本地开发环境使用。`CMS_BASE_URL`、`CMS_REQUEST_TIMEOUT_SECONDS` 和 `CMS_ALLOW_INSECURE_HTTP` 可覆盖 YAML。`CMS_MCP_CLIENT_ID` 与 `CMS_MCP_CLIENT_SECRET` 只能由进程环境提供，不能写入 YAML、项目 `.env` 或示例配置。
+
+CMS 服务端仍保留自己的 `mcp` 配置，用于服务账号 bootstrap、JWT audience 和 token TTL；MCP 客户端不读取该文件。服务端 bootstrap 的凭证轮换将在后续独立运维命令中脱离常驻 server 启动路径。
+
+当前实现中，首次创建或轮换服务账号时，server 部署环境仍需单独提供 `MCP_ENABLED=true`、`MCP_CLIENT_ID` 和 `MCP_CLIENT_SECRET`。这组变量不得传给 Codex 启动的 MCP 子进程；MCP 子进程只接收对应的 `CMS_MCP_CLIENT_ID` 和 `CMS_MCP_CLIENT_SECRET`。
 
 ## 5. 初始 MCP 能力面
 

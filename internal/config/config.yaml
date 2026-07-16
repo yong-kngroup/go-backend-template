@@ -53,17 +53,15 @@ auth:
   login_fail_threshold: 5
 
 mcp:
-  enabled: true
-  cms_base_url: "http://localhost:8080"
+  enabled: false
   service_account_name: "MCP Operator"
   service_account_email: "mcp-operator@example.com"
-  client_id: "cms-mcp-local-dev"
-  client_secret: "change-me-please-ignore-this-secret-value"
+  client_id: ""
+  client_secret: ""
   service_account_enabled: true
   secret_rotation_grace_minutes: 60
   token_audience: "cms-api"
   access_token_ttl_minutes: 10
-  request_timeout_seconds: 10
 
 email:
   mode: "log"

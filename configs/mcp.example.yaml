@@ -1,0 +1,5 @@
+# Optional MCP client settings. Credentials must be injected as
+# CMS_MCP_CLIENT_ID and CMS_MCP_CLIENT_SECRET, never stored in this file.
+cms_base_url: https://cms.example.internal
+request_timeout_seconds: 10
+allow_insecure_http: false
