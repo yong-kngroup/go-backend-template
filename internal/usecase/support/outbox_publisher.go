@@ -14,7 +14,8 @@ import (
 
 var outboxPublisherTracer = otel.Tracer("github.com/freeDog-wy/go-backend-template/internal/usecase/support")
 
-// OutboxPublisher 负责扫描本地 outbox 并把事件真正投递到外部消息系统。
+// OutboxPublisher 负责扫描本地 Outbox 并把事件真正投递到外部消息系统。
+// 它实现至少一次投递：成功发送但未成功标记 published_at 的事件会在下次扫描时重发。
 type OutboxPublisher struct {
 	repo      domainOutbox.Repository
 	publisher domainOutbox.Publisher
@@ -41,6 +42,7 @@ func NewOutboxPublisher(
 }
 
 // PublishPending 每次抓取一批未发布事件，按顺序投递，成功后再回写 published 状态。
+// 发布失败会停止当前批次；已成功发送的前缀仍会被标记，未发送部分留待下次扫描。
 func (p *OutboxPublisher) PublishPending(ctx context.Context) (err error) {
 	ctx, span := outboxPublisherTracer.Start(ctx, "outbox.publish_pending")
 	defer func() {

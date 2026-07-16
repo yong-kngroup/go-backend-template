@@ -14,6 +14,8 @@ import (
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 )
 
+// Service 编排角色、权限和用户角色关系的管理用例。
+// 角色与权限集合的复合写入由相应 Usecase 建立事务边界；默认授权数据始终先幂等初始化。
 type Service struct {
 	tx       shared.TxManager
 	repo     domainAuthorization.Repository
@@ -42,6 +44,8 @@ func New(
 	}
 }
 
+// EnsureAdminAccess 要求用户至少拥有一项权限；它不等同于拥有某个具体权限。
+// 需要细粒度授权的路由应调用 HasPermission。
 func (s *Service) EnsureAdminAccess(ctx context.Context, userID uint) error {
 	codes, err := s.repo.ListUserPermissionCodes(ctx, userID)
 	if err != nil {
@@ -53,6 +57,7 @@ func (s *Service) EnsureAdminAccess(ctx context.Context, userID uint) error {
 	return nil
 }
 
+// HasPermission 根据权限码判断访问权，角色名称不是授权判断条件。
 func (s *Service) HasPermission(ctx context.Context, userID uint, code string) (bool, error) {
 	codes, err := s.repo.ListUserPermissionCodes(ctx, userID)
 	if err != nil {
@@ -226,6 +231,8 @@ func (s *Service) ListUserRoles(ctx context.Context, userID uint) ([]*RoleResult
 	return results, nil
 }
 
+// EnsureDefaults 幂等地安装系统默认权限、超级管理员角色及其关系。
+// 它可在每次写操作前调用，避免依赖一次性的人工初始化步骤。
 func (s *Service) EnsureDefaults(ctx context.Context) error {
 	return s.defaults.Ensure(ctx)
 }

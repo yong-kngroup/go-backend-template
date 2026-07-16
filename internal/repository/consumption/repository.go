@@ -24,6 +24,8 @@ func New(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
+// Begin 使用唯一约束建立首个消费记录；冲突时持有行锁判断锁状态或恢复可重试记录。
+// 该过程必须是原子的，避免同一 consumer group 内的多个 worker 并发执行副作用。
 func (r *Repository) Begin(ctx context.Context, command domainConsumption.BeginCommand) (domainConsumption.BeginResult, error) {
 	if !command.Valid() {
 		return domainConsumption.BeginResult{}, domainConsumption.ErrInvalidRecord
@@ -38,7 +40,7 @@ func (r *Repository) Begin(ctx context.Context, command domainConsumption.BeginC
 			TraceID:       strings.TrimSpace(command.TraceID),
 			Status:        string(domainConsumption.StatusProcessing),
 			AttemptCount:  1,
-			LockedUntil:   timeRef(command.LockedUntil),
+			LockedUntil:   new(command.LockedUntil),
 			CreatedAt:     command.AttemptedAt,
 			UpdatedAt:     command.AttemptedAt,
 		}
@@ -108,6 +110,7 @@ func (r *Repository) Begin(ctx context.Context, command domainConsumption.BeginC
 	return result, err
 }
 
+// MarkDone 将消息置为终态。调用方应在业务处理成功、提交 offset 前调用它。
 func (r *Repository) MarkDone(ctx context.Context, consumerGroup, messageKey string, processedAt time.Time) error {
 	if strings.TrimSpace(consumerGroup) == "" || strings.TrimSpace(messageKey) == "" || processedAt.IsZero() {
 		return domainConsumption.ErrInvalidRecord
@@ -125,6 +128,7 @@ func (r *Repository) MarkDone(ctx context.Context, consumerGroup, messageKey str
 		}).Error
 }
 
+// MarkFailed 记录已转发到重试链路的失败，允许锁过期后重新领取。
 func (r *Repository) MarkFailed(ctx context.Context, consumerGroup, messageKey, lastError string, failedAt time.Time) error {
 	if strings.TrimSpace(consumerGroup) == "" || strings.TrimSpace(messageKey) == "" || failedAt.IsZero() {
 		return domainConsumption.ErrInvalidRecord
@@ -141,6 +145,7 @@ func (r *Repository) MarkFailed(ctx context.Context, consumerGroup, messageKey, 
 		}).Error
 }
 
+// MarkDead 记录已转发到死信队列的终态，后续重复投递不再执行业务处理。
 func (r *Repository) MarkDead(ctx context.Context, consumerGroup, messageKey, lastError string, failedAt time.Time) error {
 	if strings.TrimSpace(consumerGroup) == "" || strings.TrimSpace(messageKey) == "" || failedAt.IsZero() {
 		return domainConsumption.ErrInvalidRecord
@@ -155,8 +160,4 @@ func (r *Repository) MarkDead(ctx context.Context, consumerGroup, messageKey, la
 			"last_error":   strings.TrimSpace(lastError),
 			"updated_at":   failedAt,
 		}).Error
-}
-
-func timeRef(value time.Time) *time.Time {
-	return &value
 }

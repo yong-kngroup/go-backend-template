@@ -100,6 +100,11 @@ func (c *consumerAdapter) Run(ctx context.Context) error {
 	return c.topology.Run(ctx, c.handleLoopMessage)
 }
 
+// handleLoopMessage 维持“结果持久化后才提交 offset”的消费顺序。
+//
+// 格式错误必须先写入 DLQ；业务失败必须先写入 retry/DLQ 并更新消费记录。任一步失败
+// 都返回错误以保留原 offset，等待 Kafka 重新投递。消费记录只提供去重和处理锁，不能
+// 将该流程误解为恰好一次投递。
 func (c *consumerAdapter) handleLoopMessage(ctx context.Context, loop pkgkafka.ReaderLoop, record pkgkafka.Record) (err error) {
 	eventMessage, err := c.decodeMessage(record)
 	if err != nil {
@@ -234,6 +239,7 @@ func (c *consumerAdapter) waitRetryDelay(ctx context.Context, loop pkgkafka.Read
 	}
 }
 
+// handleFailure 在提交原消息前确保失败结果已进入可恢复的 retry 或终态 DLQ。
 func (c *consumerAdapter) handleFailure(ctx context.Context, loop pkgkafka.ReaderLoop, record pkgkafka.Record, message Message, attemptCount int, handlerErr error) error {
 	now := time.Now()
 	nonRetryable := IsNonRetryable(handlerErr)

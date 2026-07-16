@@ -14,6 +14,10 @@ import (
 	"time"
 )
 
+// Service 编排 CMS 写操作、公开查询、审计事件和媒体可用性检查。
+//
+// 公开 slug、重定向和审计记录必须与对应内容更新处于同一事务；读取操作不应产生外部
+// 副作用。复杂写流程的可执行行为以本包测试为准。
 type Service struct {
 	tx                shared.TxManager
 	repo              domainCMS.Repository
@@ -204,6 +208,9 @@ func (s *Service) CreateCategory(ctx context.Context, cmd CreateCategoryCmd) (*C
 	}
 	return &CategoryResult{ID: c.ID, ParentID: c.ParentID, SortOrder: c.SortOrder, Locale: tr.Locale, Name: tr.Name, Slug: tr.Slug}, nil
 }
+
+// UpsertCategoryTranslation 更新分类翻译。已启用分类的 slug 变化会在同一事务中校验新
+// 路径、保存翻译并为旧路径创建永久重定向，防止公开链接失效。
 func (s *Service) UpsertCategoryTranslation(ctx context.Context, cmd UpsertCategoryTranslationCmd) (*CategoryResult, error) {
 	if cmd.CategoryID == 0 {
 		return nil, domainCMS.ErrInvalidInput
