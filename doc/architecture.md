@@ -97,7 +97,7 @@ Kafka record
 
 关键入口：
 
-- 幂等中间件和存储：`internal/handler/middleware/idempotency.go`、`internal/infra/idempotency/store.go`。
+- 幂等中间件、存储契约、表模型和 PostgreSQL 实现：`internal/handler/middleware/idempotency.go`、`internal/infra/idempotency`、`internal/model/idempotency`、`internal/repository/idempotency`。
 - 认证与授权中间件：`internal/handler/middleware/auth.go`、`internal/handler/middleware/admin.go`。
 - 授权用例与领域：`internal/usecase/authorization`、`internal/domain/authorization`。
 

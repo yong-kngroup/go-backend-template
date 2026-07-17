@@ -4,11 +4,11 @@ import (
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/idempotency"
 	infraOutbox "github.com/freeDog-wy/go-backend-template/internal/infra/outbox"
 	repoAuth "github.com/freeDog-wy/go-backend-template/internal/repository/auth"
 	repoAuthorization "github.com/freeDog-wy/go-backend-template/internal/repository/authorization"
 	repoCMS "github.com/freeDog-wy/go-backend-template/internal/repository/cms"
+	repoIdempotency "github.com/freeDog-wy/go-backend-template/internal/repository/idempotency"
 	repoIdentity "github.com/freeDog-wy/go-backend-template/internal/repository/identity"
 	repoMedia "github.com/freeDog-wy/go-backend-template/internal/repository/media"
 	repoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
@@ -33,7 +33,7 @@ type serverRepositories struct {
 	cms               *repoCMS.Repository
 	media             *repoMedia.Repository
 	mcpServiceAccount *repoServiceAccount.ServiceAccountRepository
-	idempotency       *idempotency.Store
+	idempotency       *repoIdempotency.Repository
 }
 
 func newServerRepositories(db *gorm.DB) *serverRepositories {
@@ -46,7 +46,7 @@ func newServerRepositories(db *gorm.DB) *serverRepositories {
 		cms:               repoCMS.New(db),
 		media:             repoMedia.New(db),
 		mcpServiceAccount: repoServiceAccount.NewServiceAccountRepository(db),
-		idempotency:       idempotency.New(db),
+		idempotency:       repoIdempotency.New(db),
 	}
 }
 
