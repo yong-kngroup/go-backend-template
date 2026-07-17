@@ -39,5 +39,5 @@ db/migrations/000002_add_example.down.sql
 PostgreSQL 迁移集成测试会在隔离 schema 中执行完整的向上迁移，再执行对应的向下迁移：
 
 ```powershell
-go test -tags=integration ./pkg/postgres
+go test -tags=integration ./internal/infra/postgres
 ```

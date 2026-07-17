@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/freeDog-wy/go-backend-template/internal/infra/postgres"
 	modelCMS "github.com/freeDog-wy/go-backend-template/internal/model/cms"
 	modelMedia "github.com/freeDog-wy/go-backend-template/internal/model/media"
 	"github.com/freeDog-wy/go-backend-template/internal/testsupport"
-	"github.com/freeDog-wy/go-backend-template/pkg/postgres"
 )
 
 func TestRepositoryIntegrationListReadyPublic(t *testing.T) {

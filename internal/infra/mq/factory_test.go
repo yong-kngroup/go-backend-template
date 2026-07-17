@@ -5,14 +5,13 @@ import (
 	"testing"
 	"time"
 
-	domainConsumption "github.com/freeDog-wy/go-backend-template/internal/domain/consumption"
 	pkgkafka "github.com/freeDog-wy/go-backend-template/pkg/kafka"
 )
 
 type fakeConsumptionRepository struct{}
 
-func (fakeConsumptionRepository) Begin(context.Context, domainConsumption.BeginCommand) (domainConsumption.BeginResult, error) {
-	return domainConsumption.BeginResult{}, nil
+func (fakeConsumptionRepository) Begin(context.Context, ConsumptionBegin) (ConsumptionBeginResult, error) {
+	return ConsumptionBeginResult{}, nil
 }
 
 func (fakeConsumptionRepository) MarkDone(context.Context, string, string, time.Time) error {

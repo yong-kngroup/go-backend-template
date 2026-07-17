@@ -1,6 +1,6 @@
 //go:build integration
 
-package mq
+package mq_test
 
 import (
 	"context"
@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	domainConsumption "github.com/freeDog-wy/go-backend-template/internal/domain/consumption"
-	modelConsumption "github.com/freeDog-wy/go-backend-template/internal/model/consumption"
-	repoConsumption "github.com/freeDog-wy/go-backend-template/internal/repository/consumption"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	platformMessaging "github.com/freeDog-wy/go-backend-template/internal/platform/messaging"
 	"github.com/freeDog-wy/go-backend-template/internal/testsupport"
 	pkgkafka "github.com/freeDog-wy/go-backend-template/pkg/kafka"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
@@ -21,7 +20,7 @@ import (
 
 func TestConsumerAdapterIntegrationConsumesAndMarksDone(t *testing.T) {
 	db := testsupport.OpenPostgres(t)
-	if err := db.AutoMigrate(&modelConsumption.Record{}); err != nil {
+	if err := db.AutoMigrate(&platformMessaging.RecordModel{}); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
 	broker := testsupport.OpenKafka(t)
@@ -30,21 +29,24 @@ func TestConsumerAdapterIntegrationConsumesAndMarksDone(t *testing.T) {
 	groupID := fmt.Sprintf("integration-consumer-%d", seed)
 	messageKey := fmt.Sprintf("message-%d", seed)
 	startOffset := int64(kgo.FirstOffset)
-	records := repoConsumption.New(db)
-	consumer := newConsumerAdapter(broker.Brokers, topic, logger.Noop(), records, consumerAdapterConfig{
+	records := platformMessaging.New(db)
+	consumer, err := mq.NewConsumer(mq.ConsumerOptions{
+		KafkaOptions:      mq.KafkaOptions{Brokers: broker.Brokers, Topic: topic, ClientID: "integration-consumer"},
+		StartOffset:       &startOffset,
 		GroupID:           groupID,
-		ClientID:          "integration-consumer",
 		MinBytes:          1,
 		MaxBytes:          1024,
 		MaxWait:           100 * time.Millisecond,
-		StartOffset:       &startOffset,
 		ProcessingLockTTL: time.Minute,
 		MaxRetries:        1,
 		DeadLetterTopic:   topic + ".dlq",
-	})
+	}, records, logger.Noop())
+	if err != nil {
+		t.Fatalf("NewConsumer() error = %v", err)
+	}
 
-	handled := make(chan Message, 1)
-	consumer.Handle("integration.event", func(_ context.Context, message Message) error {
+	handled := make(chan mq.Message, 1)
+	consumer.Handle("integration.event", func(_ context.Context, message mq.Message) error {
 		handled <- message
 		return nil
 	})
@@ -86,9 +88,9 @@ func assertConsumptionDone(t *testing.T, db *gorm.DB, groupID, messageKey string
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		var record modelConsumption.Record
+		var record platformMessaging.RecordModel
 		if err := db.Where("consumer_group = ? AND message_key = ?", groupID, messageKey).First(&record).Error; err == nil {
-			if record.Status != string(domainConsumption.StatusDone) || record.ProcessedAt == nil {
+			if record.Status != string(mq.ConsumptionStatusDone) || record.ProcessedAt == nil {
 				t.Fatalf("consumption record = %+v", record)
 			}
 			return

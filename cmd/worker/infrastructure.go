@@ -7,10 +7,10 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/postgres"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
 	"github.com/freeDog-wy/go-backend-template/pkg/email"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
-	"github.com/freeDog-wy/go-backend-template/pkg/postgres"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gorm.io/gorm"
 )

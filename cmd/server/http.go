@@ -23,7 +23,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
-func newServerRegistry(infra *serverInfrastructure, repos *serverRepositories, services *serverServices, serviceTokenHandler *hdlServiceToken.Handler) *handler.Registry {
+func newServerRegistry(infra *serverInfrastructure, platform *serverPlatform, services *serverServices, serviceTokenHandler *hdlServiceToken.Handler) *handler.Registry {
 	registry := handler.NewRegistry()
 	registry.Add(hdlHealth.New(map[string]hdlHealth.Checker{
 		"database": hdlHealth.CheckFunc(infra.sqlDB.PingContext),
@@ -38,7 +38,7 @@ func newServerRegistry(infra *serverInfrastructure, repos *serverRepositories, s
 	registry.Add(hdlMe.New(services.auth, services.auth, services.identity))
 
 	adminCMS := hdlAdminCMS.New(services.auth, services.authorization, services.cms)
-	adminCMS.SetIdempotency(middleware.Idempotency(repos.idempotency))
+	adminCMS.SetIdempotency(middleware.Idempotency(platform.idempotency))
 	registry.Add(adminCMS)
 	registry.Add(hdlAdminMedia.New(services.auth, services.authorization, services.media))
 	registry.Add(hdlPublicContent.New(services.cms))

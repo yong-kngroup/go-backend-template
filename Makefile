@@ -108,7 +108,7 @@ test-integration: \
 	test-bootstrap-integration
 
 test-db-integration:
-	$(GO) test -tags=integration ./pkg/postgres ./internal/repository/...
+	$(GO) test -tags=integration ./internal/infra/postgres ./internal/platform/... ./internal/repository/...
 
 test-redis-integration:
 	$(GO) test -tags=integration ./internal/repository/auth ./pkg/captcha ./pkg/ratelimit
@@ -126,7 +126,7 @@ test-bootstrap-integration:
 	$(GO) test -tags=integration ./internal/usecase/bootstrap
 
 test-consumption-integration:
-	$(GO) test -v -tags=integration ./internal/repository/consumption
+	$(GO) test -v -tags=integration ./internal/platform/messaging
 
 test-auth:
 	$(GO) test ./internal/usecase/auth

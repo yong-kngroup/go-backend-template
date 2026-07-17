@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
-	"github.com/freeDog-wy/go-backend-template/pkg/postgres"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/postgres"
 	"github.com/golang-migrate/migrate/v4"
 )
 

@@ -41,8 +41,10 @@ template/v0.1.0
 
 ```text
 handler -> usecase -> domain
-                  -> repository / infra
-cmd -> handler / usecase / infra 的装配
+platform -> domain / repository / infra
+repository -> domain
+infra -> 第三方库
+cmd -> handler / usecase / platform / repository / infra 的装配
 ```
 
 - `cmd/server` 仅负责 HTTP 服务启动和依赖装配。
@@ -51,13 +53,14 @@ cmd -> handler / usecase / infra 的装配
 - `handler` 仅负责协议转换、输入校验、认证授权和 HTTP 响应。
 - `usecase` 负责业务流程编排、事务边界和调用领域能力。
 - `domain` 定义实体、领域规则、事件和依赖契约；不得依赖 Gin、GORM、Redis、Kafka 等具体实现。
-- `repository` 负责 PostgreSQL、Redis 等业务数据持久化实现；不得承载业务流程。
-- `infra` 负责消息、日志、追踪、加密、对象存储等外部技术适配。
+- `repository` 负责 auth、CMS、identity 等业务领域数据的 PostgreSQL、Redis 持久化实现；不得承载业务流程。
+- `platform` 负责 Outbox、HTTP 幂等、消息消费状态等无具体业务领域的平台能力；组件可拥有自己的表和存储实现，但不得读写业务领域数据或表达业务规则。
+- `infra` 负责 PostgreSQL、Redis、Kafka、日志、追踪、加密、对象存储等技术适配；生产代码不得导入 `domain`、`repository`、`platform`、`usecase`、`handler` 或 `cmd`。
 - `pkg` 只放可脱离本项目业务语义复用的技术组件。
 
-禁止在 Handler 中直接操作 GORM、Redis 或 Kafka；禁止在 Usecase 中直接依赖具体 Kafka、Redis 或 GORM 类型。
+禁止在 Handler 中直接操作 GORM、Redis 或 Kafka；禁止在 Usecase 中直接依赖具体 Kafka、Redis 或 GORM 类型。Platform 对外应暴露窄接口并复用调用方 context，不得自行创建业务事务。
 
-Repository 类型以领域语义命名，不以当前存储介质命名；实现细节由所在包、依赖和装配体现。组合 PostgreSQL 与 Redis 旁路缓存且行为发生变化时，使用 `Cached...Repository`，并由该装饰器实现领域端口。
+Repository 类型以领域语义命名，不以当前存储介质命名；实现细节由所在包、依赖和装配体现。组合 PostgreSQL 与 Redis 旁路缓存且行为发生变化时，使用 `Cached...Repository`，并由该装饰器实现领域端口。平台组件的存储实现与模型应保留在各自的 `platform/<capability>` 目录，不放入全局 `repository` 或 `model`。
 
 ### 2.1 HTTP 响应约定
 

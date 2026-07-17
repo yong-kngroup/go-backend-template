@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	domainConsumption "github.com/freeDog-wy/go-backend-template/internal/domain/consumption"
 	pkgkafka "github.com/freeDog-wy/go-backend-template/pkg/kafka"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 )
@@ -18,6 +17,7 @@ type KafkaOptions struct {
 
 type ConsumerOptions struct {
 	KafkaOptions
+	StartOffset       *int64
 	GroupID           string
 	MaxRetries        int
 	ProcessingLockTTL time.Duration
@@ -44,7 +44,7 @@ func NewPublisher(options KafkaOptions, log logger.Logger) (Publisher, error) {
 	return newPublisherAdapter(options.Brokers, options.Topic, options.ClientID, log), nil
 }
 
-func NewConsumer(options ConsumerOptions, records domainConsumption.Repository, log logger.Logger) (Consumer, error) {
+func NewConsumer(options ConsumerOptions, records ConsumptionStore, log logger.Logger) (Consumer, error) {
 	if err := options.KafkaOptions.validate("kafka consumer"); err != nil {
 		return nil, err
 	}
@@ -67,6 +67,7 @@ func NewConsumer(options ConsumerOptions, records domainConsumption.Repository, 
 		MinBytes:          options.MinBytes,
 		MaxBytes:          options.MaxBytes,
 		MaxWait:           options.MaxWait,
+		StartOffset:       options.StartOffset,
 		ProcessingLockTTL: options.ProcessingLockTTL,
 		MaxRetries:        options.MaxRetries,
 		RetryLevels:       options.RetryLevels,

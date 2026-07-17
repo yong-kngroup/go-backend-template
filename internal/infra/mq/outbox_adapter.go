@@ -1,10 +1,6 @@
 package mq
 
-import (
-	"context"
-
-	domainOutbox "github.com/freeDog-wy/go-backend-template/internal/domain/outbox"
-)
+import "context"
 
 // OutboxPublisherAdapter maps the outbox publisher contract onto mq.Publisher.
 type OutboxPublisherAdapter struct {
@@ -14,8 +10,6 @@ type OutboxPublisherAdapter struct {
 func NewOutboxPublisherAdapter(publisher Publisher) *OutboxPublisherAdapter {
 	return &OutboxPublisherAdapter{publisher: publisher}
 }
-
-var _ domainOutbox.Publisher = (*OutboxPublisherAdapter)(nil)
 
 func (a *OutboxPublisherAdapter) Publish(ctx context.Context, messageKey, eventName string, payload []byte, traceID, traceContext string) error {
 	return a.publisher.Publish(ctx, Message{

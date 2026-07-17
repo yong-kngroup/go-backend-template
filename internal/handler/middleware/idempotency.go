@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/freeDog-wy/go-backend-template/internal/handler"
-	repoIdempotency "github.com/freeDog-wy/go-backend-template/internal/repository/idempotency"
+	platformIdempotency "github.com/freeDog-wy/go-backend-template/internal/platform/idempotency"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +20,7 @@ const IdempotencyKeyHeader = "Idempotency-Key"
 //
 // 无 key 的请求保持原有行为。已领取但未完成的记录不会执行第二次；首次业务响应已经
 // 写出后，若 Complete 失败也不能用基础设施错误替换该响应，以避免客户端误判业务失败。
-func Idempotency(store repoIdempotency.Store) gin.HandlerFunc {
+func Idempotency(store platformIdempotency.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := strings.TrimSpace(c.GetHeader(IdempotencyKeyHeader))
 		if key == "" {

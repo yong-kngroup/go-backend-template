@@ -13,11 +13,11 @@ import (
 
 	domainCMS "github.com/freeDog-wy/go-backend-template/internal/domain/cms"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/postgres"
 	modelCMS "github.com/freeDog-wy/go-backend-template/internal/model/cms"
 	baseRepository "github.com/freeDog-wy/go-backend-template/internal/repository"
 	"github.com/freeDog-wy/go-backend-template/internal/testsupport"
 	svcCMS "github.com/freeDog-wy/go-backend-template/internal/usecase/cms"
-	"github.com/freeDog-wy/go-backend-template/pkg/postgres"
 )
 
 func TestRepositoryIntegrationCMSConstraintsAndPublicVisibility(t *testing.T) {

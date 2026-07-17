@@ -34,7 +34,8 @@ func initApp(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 	repos := newServerRepositories(infra.db)
-	services, err := newServerServices(cfg, infra, repos)
+	platform := newServerPlatform(infra.db)
+	services, err := newServerServices(cfg, infra, repos, platform)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +47,7 @@ func initApp(cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	registry := newServerRegistry(infra, repos, services, serviceTokenHandler)
+	registry := newServerRegistry(infra, platform, services, serviceTokenHandler)
 
 	return &App{
 		server: newHTTPServer(cfg, newRouter(cfg, infra, registry)),

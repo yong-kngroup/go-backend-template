@@ -7,7 +7,7 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
-	svcMessaging "github.com/freeDog-wy/go-backend-template/internal/usecase/messaging"
+	platformMessaging "github.com/freeDog-wy/go-backend-template/internal/platform/messaging"
 	"github.com/freeDog-wy/go-backend-template/pkg/kafka"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"github.com/freeDog-wy/go-backend-template/pkg/scheduler"
@@ -29,7 +29,7 @@ func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *s
 		if err != nil {
 			return fmt.Errorf("initialize kafka dead letter inspector: %w", err)
 		}
-		service := svcMessaging.NewDeadLetterUsecase(inspector, nil, appLogger, cfg.Cron.DLQInspectionBatchSize, 0, "")
+		service := platformMessaging.NewDeadLetterService(inspector, nil, appLogger, cfg.Cron.DLQInspectionBatchSize, 0, "")
 		if err := runner.Register(scheduler.Job{
 			Name:     "mq.dlq.inspect",
 			Interval: time.Duration(cfg.Cron.DLQInspectionIntervalSeconds) * time.Second,
@@ -58,7 +58,7 @@ func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *s
 		if err != nil {
 			return err
 		}
-		service := svcMessaging.NewDeadLetterUsecase(nil, replayer, appLogger, 0, cfg.Cron.DLQReplayBatchSize, target)
+		service := platformMessaging.NewDeadLetterService(nil, replayer, appLogger, 0, cfg.Cron.DLQReplayBatchSize, target)
 		if err := runner.Register(scheduler.Job{
 			Name:     "mq.dlq.replay",
 			Interval: time.Duration(cfg.Cron.DLQReplayIntervalSeconds) * time.Second,

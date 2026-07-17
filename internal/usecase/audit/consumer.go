@@ -4,8 +4,8 @@ import (
 	"context"
 
 	domainAudit "github.com/freeDog-wy/go-backend-template/internal/domain/audit"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Consumer struct {
@@ -29,7 +29,7 @@ func (c *Consumer) OnLogRequested(ctx context.Context, evt domainAudit.LogReques
 		evt.Result,
 		evt.IP,
 		evt.UserAgent,
-		mq.TraceIDFromContext(ctx),
+		traceIDFromContext(ctx),
 		evt.Metadata,
 	)
 	if err != nil {
@@ -43,4 +43,12 @@ func (c *Consumer) OnLogRequested(ctx context.Context, evt domainAudit.LogReques
 		return err
 	}
 	return nil
+}
+
+func traceIDFromContext(ctx context.Context) string {
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		return span.SpanContext().TraceID().String()
+	}
+	return ""
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	domainConsumption "github.com/freeDog-wy/go-backend-template/internal/domain/consumption"
 	pkgkafka "github.com/freeDog-wy/go-backend-template/pkg/kafka"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"go.opentelemetry.io/otel/attribute"
@@ -34,7 +33,7 @@ type consumerAdapter struct {
 	groupID            string
 	processingLockTTL  time.Duration
 	maxRetries         int
-	consumptionRecords domainConsumption.Repository
+	consumptionRecords ConsumptionStore
 	handlers           map[string]EventHandler
 	logger             logger.Logger
 }
@@ -45,7 +44,7 @@ func newConsumerAdapter(
 	brokers []string,
 	topic string,
 	log logger.Logger,
-	records domainConsumption.Repository,
+	records ConsumptionStore,
 	cfg consumerAdapterConfig,
 ) *consumerAdapter {
 	if strings.TrimSpace(cfg.GroupID) == "" {
@@ -158,13 +157,13 @@ func (c *consumerAdapter) handleLoopMessage(ctx context.Context, loop pkgkafka.R
 	}
 
 	switch beginResult.Decision {
-	case domainConsumption.BeginDecisionDone:
+	case ConsumptionDecisionDone:
 		if err := loop.CommitMessages(handlerCtx, record); err != nil {
 			c.logger.Error("commit already processed kafka message failed", "event", eventMessage.Event, "message_key", eventMessage.Key, "offset", record.Offset, "error", err)
 			return err
 		}
 		return nil
-	case domainConsumption.BeginDecisionLocked:
+	case ConsumptionDecisionLocked:
 		lockErr := errors.New("message is being processed by another worker")
 		c.logger.Error("kafka message processing lock is active", "event", eventMessage.Event, "message_key", eventMessage.Key, "offset", record.Offset, "topic", loop.Topic)
 		return lockErr
@@ -378,8 +377,8 @@ func (c *consumerAdapter) publishDeadLetter(ctx context.Context, record pkgkafka
 	return nil
 }
 
-func (c *consumerAdapter) beginConsumption(ctx context.Context, message Message, attemptedAt time.Time) (domainConsumption.BeginResult, error) {
-	return c.consumptionRecords.Begin(ctx, domainConsumption.BeginCommand{
+func (c *consumerAdapter) beginConsumption(ctx context.Context, message Message, attemptedAt time.Time) (ConsumptionBeginResult, error) {
+	return c.consumptionRecords.Begin(ctx, ConsumptionBegin{
 		ConsumerGroup: c.groupID,
 		MessageKey:    message.Key,
 		EventName:     message.Event,

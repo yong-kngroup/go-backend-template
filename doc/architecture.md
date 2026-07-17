@@ -22,7 +22,8 @@ HTTP request
   -> handler（协议转换、输入校验、响应映射）
   -> usecase（流程编排、事务边界）
   -> domain（实体、规则、端口）
-  -> repository（PostgreSQL、Redis）/ infra（Kafka、S3 等）
+  -> domain 端口
+  -> repository（业务数据）/ platform（应用协作能力）/ infra（技术适配）
 ```
 
 关键入口：
@@ -32,7 +33,8 @@ HTTP request
 - 用例：`internal/usecase/<领域>`。
 - 领域契约：`internal/domain/<领域>`。
 - 具体持久化：`internal/repository/<领域>`。
-- Redis 客户端与追踪：`pkg/redis`；认证刷新令牌会话：`internal/repository/auth`。
+- 平台能力：`internal/platform/<能力>`，例如 Outbox、幂等与消息消费状态。
+- Redis 客户端与追踪：`internal/infra/redis`；认证刷新令牌会话：`internal/repository/auth`。
 
 Handler 不直接访问 GORM、Redis 或 Kafka。Usecase 只依赖 domain 定义的端口，具体技术实现由 `cmd` 注入。
 
@@ -58,9 +60,8 @@ Outbox 提供至少一次投递。发布成功但回写 `published_at` 失败时
 关键入口：
 
 - 事务端口：`internal/domain/shared/tx.go`。
-- PostgreSQL 连接与迁移：`pkg/postgres`；事务上下文实现：`internal/repository/tx.go`。
-- 事件落库：`internal/infra/outbox/event_bus.go`。
-- Outbox 扫描与发布：`internal/usecase/outbox/publisher.go`，仅由 `cmd/cron` 调用。
+- PostgreSQL 连接与迁移：`internal/infra/postgres`；事务上下文实现：`internal/repository/tx.go`。
+- 事件落库与扫描发布：`internal/platform/outbox`；发布任务仅由 `cmd/cron` 调用。
 
 ## 消息消费、重试与死信
 
@@ -80,10 +81,9 @@ Kafka record
 
 关键入口：
 
-- 消费适配器：`internal/infra/mq/consumer_adapter.go`。
-- 消费状态契约：`internal/domain/consumption`。
-- 消费记录持久化：`internal/repository/consumption`。
-- 死信巡检与回放：`internal/infra/mq/dead_letter_adapter.go`。
+- Kafka 消费适配器：`internal/infra/mq/consumer_adapter.go`。
+- 消费状态与持久化：`internal/platform/messaging`。
+- 死信巡检与回放流程：`internal/platform/messaging`；Kafka 死信读写：`internal/infra/mq/dead_letter_adapter.go`。
 
 ## 幂等、认证与授权
 
@@ -98,7 +98,7 @@ Kafka record
 
 关键入口：
 
-- 幂等中间件、存储契约、表模型和 PostgreSQL 实现：`internal/handler/middleware/idempotency.go`、`internal/model/idempotency`、`internal/repository/idempotency`。
+- 幂等中间件与平台存储：`internal/handler/middleware/idempotency.go`、`internal/platform/idempotency`。
 - 认证与授权中间件：`internal/handler/middleware/auth.go`、`internal/handler/middleware/admin.go`。
 - 授权用例与领域：`internal/usecase/authorization`、`internal/domain/authorization`。
 

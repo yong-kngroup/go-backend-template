@@ -12,18 +12,17 @@ import (
 	domainMedia "github.com/freeDog-wy/go-backend-template/internal/domain/media"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/crypto"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
-	infraOutbox "github.com/freeDog-wy/go-backend-template/internal/infra/outbox"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/postgres"
+	redisClient "github.com/freeDog-wy/go-backend-template/internal/infra/redis"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/storage"
 	infraToken "github.com/freeDog-wy/go-backend-template/internal/infra/token"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
+	platformOutbox "github.com/freeDog-wy/go-backend-template/internal/platform/outbox"
 	baseRepository "github.com/freeDog-wy/go-backend-template/internal/repository"
 	repoAuth "github.com/freeDog-wy/go-backend-template/internal/repository/auth"
-	repoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	"github.com/freeDog-wy/go-backend-template/pkg/captcha"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
-	"github.com/freeDog-wy/go-backend-template/pkg/postgres"
 	"github.com/freeDog-wy/go-backend-template/pkg/ratelimit"
-	redisClient "github.com/freeDog-wy/go-backend-template/pkg/redis"
 	"github.com/redis/go-redis/v9"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gorm.io/gorm"
@@ -99,8 +98,8 @@ func newServerInfrastructure(cfg *config.Config) (*serverInfrastructure, error) 
 	}, nil
 }
 
-func newServerEventBus(repo *repoOutbox.Repository) *infraOutbox.EventBus {
-	return infraOutbox.NewEventBus(repo)
+func newServerEventBus(repo *platformOutbox.Repository) *platformOutbox.EventBus {
+	return platformOutbox.NewEventBus(repo)
 }
 
 func newMediaStorage(cfg *config.Config) (domainMedia.Storage, error) {

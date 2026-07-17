@@ -4,14 +4,14 @@ import (
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
-	infraOutbox "github.com/freeDog-wy/go-backend-template/internal/infra/outbox"
+	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
+	platformIdempotency "github.com/freeDog-wy/go-backend-template/internal/platform/idempotency"
+	platformOutbox "github.com/freeDog-wy/go-backend-template/internal/platform/outbox"
 	repoAuth "github.com/freeDog-wy/go-backend-template/internal/repository/auth"
 	repoAuthorization "github.com/freeDog-wy/go-backend-template/internal/repository/authorization"
 	repoCMS "github.com/freeDog-wy/go-backend-template/internal/repository/cms"
-	repoIdempotency "github.com/freeDog-wy/go-backend-template/internal/repository/idempotency"
 	repoIdentity "github.com/freeDog-wy/go-backend-template/internal/repository/identity"
 	repoMedia "github.com/freeDog-wy/go-backend-template/internal/repository/media"
-	repoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	repoServiceAccount "github.com/freeDog-wy/go-backend-template/internal/repository/service_account"
 	repoVerification "github.com/freeDog-wy/go-backend-template/internal/repository/verification"
 	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
@@ -28,12 +28,10 @@ type serverRepositories struct {
 	credential        *repoAuth.CredentialRepository
 	authorization     *repoAuthorization.Repository
 	user              *repoIdentity.Repository
-	outbox            *repoOutbox.Repository
 	verification      *repoVerification.Repository
 	cms               *repoCMS.Repository
 	media             *repoMedia.Repository
 	mcpServiceAccount *repoServiceAccount.ServiceAccountRepository
-	idempotency       *repoIdempotency.Repository
 }
 
 func newServerRepositories(db *gorm.DB) *serverRepositories {
@@ -41,17 +39,27 @@ func newServerRepositories(db *gorm.DB) *serverRepositories {
 		credential:        repoAuth.New(db),
 		authorization:     repoAuthorization.New(db),
 		user:              repoIdentity.New(db),
-		outbox:            repoOutbox.New(db),
 		verification:      repoVerification.New(db),
 		cms:               repoCMS.New(db),
 		media:             repoMedia.New(db),
 		mcpServiceAccount: repoServiceAccount.New(db),
-		idempotency:       repoIdempotency.New(db),
+	}
+}
+
+type serverPlatform struct {
+	outbox      *platformOutbox.Repository
+	idempotency *platformIdempotency.Repository
+}
+
+func newServerPlatform(db *gorm.DB) *serverPlatform {
+	return &serverPlatform{
+		outbox:      platformOutbox.New(db),
+		idempotency: platformIdempotency.New(db),
 	}
 }
 
 type serverServices struct {
-	eventBus      *infraOutbox.EventBus
+	eventBus      shared.EventBus
 	verification  *svcVerification.Service
 	authorization *svcAuthorization.Service
 	bootstrap     *svcBootstrap.Service
@@ -61,8 +69,8 @@ type serverServices struct {
 	media         *svcMedia.Service
 }
 
-func newServerServices(cfg *config.Config, infra *serverInfrastructure, repos *serverRepositories) (*serverServices, error) {
-	eventBus := newServerEventBus(repos.outbox)
+func newServerServices(cfg *config.Config, infra *serverInfrastructure, repos *serverRepositories, platform *serverPlatform) (*serverServices, error) {
+	eventBus := newServerEventBus(platform.outbox)
 	verification := svcVerification.New(infra.txManager, repos.user, repos.verification, repos.credential, infra.passwordHasher, infra.sessionStore, eventBus, infra.logger)
 	authorization := svcAuthorization.New(infra.txManager, repos.authorization, repos.user, eventBus, infra.logger)
 	bootstrap := svcBootstrap.New(infra.txManager, repos.user, repos.authorization, repos.credential, infra.passwordHasher, infra.logger)

@@ -4,7 +4,8 @@
 
 ## 职责边界
 
-`internal/infra/mq` 只负责本项目的消息语义适配，不负责业务编排。
+`internal/infra/mq` 只负责统一消息模型与 Kafka 技术适配，不负责业务编排、消费状态
+持久化或死信应用流程。
 
 当前目录分为两层：
 
@@ -16,9 +17,9 @@
   - `errors.go`
   - `outbox_adapter.go`
   - `trace.go`
-- 适配层
+- Kafka 适配层
   - `publisher_adapter.go`
-  - `kafka_consumer.go`
+  - `consumer_adapter.go`
   - `dead_letter_adapter.go`
 
 其中纯 Kafka 技术能力已经下沉到 `pkg/kafka`：
@@ -34,17 +35,19 @@
 
 当前模板的异步链路为：
 
-1. 业务事务先写 `outbox_events`
-2. `cmd/cron` 定时扫描 outbox
+1. 业务事务通过 `platform/outbox` 写 `outbox_events`
+2. `cmd/cron` 定时扫描 Outbox
 3. `cmd/cron` 通过 `mq.Publisher` 把消息投递到 Kafka
 4. `cmd/worker` 通过 `mq.Consumer` 消费 Kafka 消息
 
 职责划分如下：
 
-- `outbox`
+- `platform/outbox`
   - 负责本地事务一致性
 - `mq`
-  - 负责本项目消息语义与 Kafka 的适配
+  - 负责统一消息模型与 Kafka 的适配
+- `platform/messaging`
+  - 负责消费状态持久化及死信巡检/回放流程
 
 ## 统一契约
 
@@ -78,7 +81,7 @@ type Consumer interface {
 
 ### Dead Letter
 
-`dead_letter.go` 定义项目死信巡检与回放使用的契约：
+`dead_letter.go` 定义 Kafka 死信读写使用的契约：
 
 - `DeadLetterInspector`
 - `DeadLetterReplayer`
@@ -98,7 +101,8 @@ type Consumer interface {
 
 ## Consumer 适配
 
-`kafka_consumer.go` 仍然负责本项目的消费治理语义，已接入数据库消费记录表 `message_consumptions`：
+`consumer_adapter.go` 负责 Kafka 消费、重试和提交 offset，并通过 `ConsumptionStore`
+接入由 `platform/messaging` 持有的 `message_consumptions` 状态：
 
 - 先用 `consumer_group + message_key` 到 DB 抢占消费权
 - 消费记录状态包括：
@@ -155,11 +159,13 @@ type Consumer interface {
 
 ## 当前结论
 
-现在这一层的职责已经更清楚：
+现在各层的职责为：
 
 - `pkg/kafka`
   - 纯 Kafka 技术件
 - `internal/infra/mq`
-  - 本项目消息模型与 Kafka 的适配
+  - 统一消息模型与 Kafka 的适配
+- `internal/platform/messaging`
+  - 消费状态持久化、死信巡检与回放应用流程
 
 Redis 不再承担消息队列职责，只保留给缓存等其他基础设施使用。

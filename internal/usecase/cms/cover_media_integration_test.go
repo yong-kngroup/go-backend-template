@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/freeDog-wy/go-backend-template/internal/infra/postgres"
 	infraStorage "github.com/freeDog-wy/go-backend-template/internal/infra/storage"
 	modelMedia "github.com/freeDog-wy/go-backend-template/internal/model/media"
 	baseRepository "github.com/freeDog-wy/go-backend-template/internal/repository"
@@ -23,7 +24,6 @@ import (
 	repoMedia "github.com/freeDog-wy/go-backend-template/internal/repository/media"
 	"github.com/freeDog-wy/go-backend-template/internal/testsupport"
 	svcMedia "github.com/freeDog-wy/go-backend-template/internal/usecase/media"
-	"github.com/freeDog-wy/go-backend-template/pkg/postgres"
 )
 
 func TestCoverMediaIntegrationUploadCompleteAndPublish(t *testing.T) {

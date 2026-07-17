@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
+	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
 	hdlServiceToken "github.com/freeDog-wy/go-backend-template/internal/handler/service_token"
-	infraOutbox "github.com/freeDog-wy/go-backend-template/internal/infra/outbox"
 	svcAuth "github.com/freeDog-wy/go-backend-template/internal/usecase/auth"
 	svcBootstrap "github.com/freeDog-wy/go-backend-template/internal/usecase/bootstrap"
 	svcServiceAccount "github.com/freeDog-wy/go-backend-template/internal/usecase/service_account"
@@ -28,7 +28,7 @@ func bootstrapServer(ctx context.Context, cfg *config.Config, services *serverSe
 	return nil
 }
 
-func newMCPServiceTokenHandler(ctx context.Context, cfg *config.Config, infra *serverInfrastructure, repos *serverRepositories, eventBus *infraOutbox.EventBus) (*hdlServiceToken.Handler, error) {
+func newMCPServiceTokenHandler(ctx context.Context, cfg *config.Config, infra *serverInfrastructure, repos *serverRepositories, eventBus shared.EventBus) (*hdlServiceToken.Handler, error) {
 	if !cfg.MCP.Enabled {
 		return nil, nil
 	}

@@ -7,7 +7,7 @@ type Event interface {
 	EventName() string
 }
 
-// EventBus 事件总线接口——领域层只定契约，实现在 infra/mq/。
+// EventBus 事件总线接口——领域层只定契约，实现在 platform/outbox。
 type EventBus interface {
 	Publish(ctx context.Context, events ...Event) error
 }
