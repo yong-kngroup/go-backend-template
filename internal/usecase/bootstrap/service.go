@@ -11,7 +11,6 @@ import (
 	domainAuthorization "github.com/freeDog-wy/go-backend-template/internal/domain/authorization"
 	domainIdentity "github.com/freeDog-wy/go-backend-template/internal/domain/identity"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
-	usecaseSupport "github.com/freeDog-wy/go-backend-template/internal/usecase/support"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 )
 
@@ -20,7 +19,6 @@ type Service struct {
 	userRepo          domainIdentity.Repository
 	authorizationRepo domainAuthorization.Repository
 	roleBindingSvc    *domainAuthorization.RoleBindingService
-	defaults          *usecaseSupport.AuthorizationDefaultsInstaller
 	credentialRepo    domainAuth.CredentialRepository
 	passwordHasher    shared.PasswordHasher
 	logger            logger.Logger
@@ -39,20 +37,26 @@ func New(
 		userRepo:          userRepo,
 		authorizationRepo: authorizationRepo,
 		roleBindingSvc:    domainAuthorization.NewRoleBindingService(),
-		defaults:          usecaseSupport.NewAuthorizationDefaultsInstaller(authorizationRepo),
 		credentialRepo:    credentialRepo,
 		passwordHasher:    passwordHasher,
 		logger:            logger,
 	}
 }
 
+// InitializeAuthorization 幂等地安装系统默认授权数据。
+// 服务进程必须在开始处理请求前调用它；授权管理用例不执行懒初始化，以保持运行时职责
+// 与启动初始化职责分离。
+func (s *Service) InitializeAuthorization(ctx context.Context) error {
+	return s.tx.Do(ctx, func(ctx context.Context) error {
+		return initializeAuthorizationDefaults(ctx, s.authorizationRepo)
+	})
+}
+
+// BootstrapAdmin 按配置创建首个管理员。调用方必须先执行 InitializeAuthorization，
+// 以确保超级管理员角色已存在。
 func (s *Service) BootstrapAdmin(ctx context.Context, cmd BootstrapAdminCmd) error {
 	var hasSuperAdmin bool
 	err := s.tx.Do(ctx, func(ctx context.Context) error {
-		if err := s.defaults.Ensure(ctx); err != nil {
-			return err
-		}
-
 		count, err := s.authorizationRepo.CountUsersByRoleCode(ctx, domainAuthorization.SuperAdminRoleCode)
 		if err != nil {
 			return err

@@ -1,4 +1,4 @@
-.PHONY: server worker cron mcp migrate docker-build docker-server docker-worker docker-cron migrate-up migrate-down migrate-version release-prepare release-check release-tag release-push release project-branch test test-unit test-integration test-db-integration test-redis-integration test-kafka-integration test-s3-integration test-media-integration test-ci test-verbose test-auth test-mq test-support test-consumption-integration
+.PHONY: server worker cron mcp migrate docker-build docker-server docker-worker docker-cron migrate-up migrate-down migrate-version release-prepare release-check release-tag release-push release project-branch test test-unit test-integration test-db-integration test-redis-integration test-kafka-integration test-s3-integration test-media-integration test-ci test-verbose test-auth test-mq test-bootstrap test-consumption-integration
 
 GO ?= go
 DOCKER ?= docker
@@ -119,8 +119,8 @@ test-auth:
 test-mq:
 	$(GO) test ./internal/infra/mq
 
-test-support:
-	$(GO) test ./internal/usecase/support
+test-bootstrap:
+	$(GO) test ./internal/usecase/bootstrap
 
 test-consumption-integration:
 	$(GO) test -v -tags=integration ./internal/repository/consumption

@@ -10,7 +10,6 @@ import (
 	domainAuthorization "github.com/freeDog-wy/go-backend-template/internal/domain/authorization"
 	domainIdentity "github.com/freeDog-wy/go-backend-template/internal/domain/identity"
 	"github.com/freeDog-wy/go-backend-template/internal/domain/shared"
-	usecaseSupport "github.com/freeDog-wy/go-backend-template/internal/usecase/support"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 )
 
@@ -21,7 +20,6 @@ type Service struct {
 	repo     domainAuthorization.Repository
 	userRepo domainIdentity.Repository
 	roleBind domainAuthorization.RoleBindingService
-	defaults *usecaseSupport.AuthorizationDefaultsInstaller
 	eventBus shared.EventBus
 	logger   logger.Logger
 }
@@ -38,7 +36,6 @@ func New(
 		repo:     repo,
 		userRepo: userRepo,
 		roleBind: *domainAuthorization.NewRoleBindingService(),
-		defaults: usecaseSupport.NewAuthorizationDefaultsInstaller(repo),
 		eventBus: eventBus,
 		logger:   logger,
 	}
@@ -95,9 +92,6 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCmd) (*RoleResul
 
 	var result *RoleResult
 	err = s.tx.Do(ctx, func(ctx context.Context) error {
-		if err := s.EnsureDefaults(ctx); err != nil {
-			return err
-		}
 		if err := s.repo.CreateRole(ctx, role); err != nil {
 			return err
 		}
@@ -124,9 +118,6 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCmd) (*RoleResul
 func (s *Service) UpdateRole(ctx context.Context, cmd UpdateRoleCmd) (*RoleResult, error) {
 	var result *RoleResult
 	err := s.tx.Do(ctx, func(ctx context.Context) error {
-		if err := s.EnsureDefaults(ctx); err != nil {
-			return err
-		}
 		role, err := s.repo.FindRoleByID(ctx, cmd.RoleID)
 		if err != nil {
 			if errors.Is(err, shared.ErrNotFound) {
@@ -184,9 +175,6 @@ func (s *Service) ListPermissions(ctx context.Context, cmd ListPermissionsCmd) (
 }
 
 func (s *Service) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCmd) error {
-	if err := s.EnsureDefaults(ctx); err != nil {
-		return err
-	}
 	if _, err := s.userRepo.FindByID(ctx, cmd.UserID); err != nil {
 		if errors.Is(err, shared.ErrNotFound) {
 			return domainIdentity.ErrUserNotFound
@@ -229,12 +217,6 @@ func (s *Service) ListUserRoles(ctx context.Context, userID uint) ([]*RoleResult
 		results = append(results, toRoleResult(role, permissions))
 	}
 	return results, nil
-}
-
-// EnsureDefaults 幂等地安装系统默认权限、超级管理员角色及其关系。
-// 它可在每次写操作前调用，避免依赖一次性的人工初始化步骤。
-func (s *Service) EnsureDefaults(ctx context.Context) error {
-	return s.defaults.Ensure(ctx)
 }
 
 func (s *Service) validateRoleIDs(ctx context.Context, roleIDs []uint) ([]uint, error) {

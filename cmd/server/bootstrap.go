@@ -14,6 +14,9 @@ import (
 )
 
 func bootstrapServer(ctx context.Context, cfg *config.Config, services *serverServices) error {
+	if err := services.bootstrap.InitializeAuthorization(ctx); err != nil {
+		return fmt.Errorf("initialize authorization: %w", err)
+	}
 	if err := services.bootstrap.BootstrapAdmin(ctx, svcBootstrap.BootstrapAdminCmd{
 		Enabled:  cfg.BootstrapAdmin.Enabled,
 		Name:     cfg.BootstrapAdmin.Name,
