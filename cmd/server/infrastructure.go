@@ -10,7 +10,6 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 	domainMedia "github.com/freeDog-wy/go-backend-template/internal/domain/media"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/cache"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/crypto"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/logging"
 	infraOutbox "github.com/freeDog-wy/go-backend-template/internal/infra/outbox"
@@ -18,11 +17,13 @@ import (
 	infraToken "github.com/freeDog-wy/go-backend-template/internal/infra/token"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
 	baseRepository "github.com/freeDog-wy/go-backend-template/internal/repository"
+	repoAuth "github.com/freeDog-wy/go-backend-template/internal/repository/auth"
 	repoOutbox "github.com/freeDog-wy/go-backend-template/internal/repository/outbox"
 	"github.com/freeDog-wy/go-backend-template/pkg/captcha"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"github.com/freeDog-wy/go-backend-template/pkg/postgres"
 	"github.com/freeDog-wy/go-backend-template/pkg/ratelimit"
+	redisClient "github.com/freeDog-wy/go-backend-template/pkg/redis"
 	"github.com/redis/go-redis/v9"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gorm.io/gorm"
@@ -37,7 +38,7 @@ type serverInfrastructure struct {
 	txManager      *baseRepository.TxManager
 	captcha        captcha.Generator
 	passwordHasher *crypto.BcryptHasher
-	sessionStore   *cache.RefreshSessionStore
+	sessionStore   *repoAuth.RefreshSessionStore
 	rateLimiter    *ratelimit.RateLimiter
 	tokenManager   *infraToken.JWTManager
 	mediaStorage   domainMedia.Storage
@@ -50,7 +51,7 @@ func newServerInfrastructure(cfg *config.Config) (*serverInfrastructure, error) 
 	}
 	appLogger := logging.Init(cfg.App.Mode)
 
-	rdb, err := cache.NewRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+	rdb, err := redisClient.Open(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
 	if err != nil {
 		return nil, fmt.Errorf("initialize redis: %w", err)
 	}
@@ -91,7 +92,7 @@ func newServerInfrastructure(cfg *config.Config) (*serverInfrastructure, error) 
 			Length: cfg.Captcha.Length,
 		}, captcha.NewRedisStore(rdb, "captcha:", 5*time.Minute)),
 		passwordHasher: crypto.NewBcryptHasher(0),
-		sessionStore:   cache.NewRefreshSessionStore(rdb),
+		sessionStore:   repoAuth.NewRefreshSessionStore(rdb),
 		rateLimiter:    ratelimit.NewRateLimiter(rdb, "rate_limit"),
 		tokenManager:   tokenManager,
 		mediaStorage:   mediaStorage,

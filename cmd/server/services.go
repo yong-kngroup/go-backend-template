@@ -45,7 +45,7 @@ func newServerRepositories(db *gorm.DB) *serverRepositories {
 		verification:      repoVerification.New(db),
 		cms:               repoCMS.New(db),
 		media:             repoMedia.New(db),
-		mcpServiceAccount: repoServiceAccount.NewServiceAccountRepository(db),
+		mcpServiceAccount: repoServiceAccount.New(db),
 		idempotency:       repoIdempotency.New(db),
 	}
 }

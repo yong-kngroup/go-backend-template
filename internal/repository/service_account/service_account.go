@@ -15,7 +15,7 @@ type ServiceAccountRepository struct{ db *gorm.DB }
 
 var _ domainServiceAccount.Repository = (*ServiceAccountRepository)(nil)
 
-func NewServiceAccountRepository(db *gorm.DB) *ServiceAccountRepository {
+func New(db *gorm.DB) *ServiceAccountRepository {
 	return &ServiceAccountRepository{db: db}
 }
 

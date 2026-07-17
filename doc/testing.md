@@ -55,7 +55,7 @@ make test-bootstrap-integration
 
 ## Redis 集成测试
 
-Redis 集成测试覆盖刷新会话、验证码存储和 `pkg/ratelimit` 的固定窗口限流行为。执行前设置测试专用 Redis DB：
+Redis 集成测试覆盖 `internal/repository/auth` 的刷新会话、验证码存储和 `pkg/ratelimit` 的固定窗口限流行为。执行前设置测试专用 Redis DB：
 
 ```powershell
 $env:TEST_REDIS_ADDR = "localhost:6379"

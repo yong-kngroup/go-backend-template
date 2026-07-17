@@ -22,7 +22,7 @@ HTTP request
   -> handler（协议转换、输入校验、响应映射）
   -> usecase（流程编排、事务边界）
   -> domain（实体、规则、端口）
-  -> repository / infra（PostgreSQL、Redis、Kafka、S3 等）
+  -> repository（PostgreSQL、Redis）/ infra（Kafka、S3 等）
 ```
 
 关键入口：
@@ -32,6 +32,7 @@ HTTP request
 - 用例：`internal/usecase/<领域>`。
 - 领域契约：`internal/domain/<领域>`。
 - 具体持久化：`internal/repository/<领域>`。
+- Redis 客户端与追踪：`pkg/redis`；认证刷新令牌会话：`internal/repository/auth`。
 
 Handler 不直接访问 GORM、Redis 或 Kafka。Usecase 只依赖 domain 定义的端口，具体技术实现由 `cmd` 注入。
 

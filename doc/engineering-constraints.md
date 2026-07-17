@@ -51,11 +51,13 @@ cmd -> handler / usecase / infra 的装配
 - `handler` 仅负责协议转换、输入校验、认证授权和 HTTP 响应。
 - `usecase` 负责业务流程编排、事务边界和调用领域能力。
 - `domain` 定义实体、领域规则、事件和依赖契约；不得依赖 Gin、GORM、Redis、Kafka 等具体实现。
-- `repository` 负责持久化实现；不得承载业务流程。
-- `infra` 负责数据库、缓存、消息、日志、追踪、加密等外部技术适配。
+- `repository` 负责 PostgreSQL、Redis 等业务数据持久化实现；不得承载业务流程。
+- `infra` 负责消息、日志、追踪、加密、对象存储等外部技术适配。
 - `pkg` 只放可脱离本项目业务语义复用的技术组件。
 
 禁止在 Handler 中直接操作 GORM、Redis 或 Kafka；禁止在 Usecase 中直接依赖具体 Kafka、Redis 或 GORM 类型。
+
+Repository 类型以领域语义命名，不以当前存储介质命名；实现细节由所在包、依赖和装配体现。组合 PostgreSQL 与 Redis 旁路缓存且行为发生变化时，使用 `Cached...Repository`，并由该装饰器实现领域端口。
 
 ### 2.1 HTTP 响应约定
 

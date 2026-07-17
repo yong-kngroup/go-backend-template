@@ -1,11 +1,11 @@
-package cache
+package redis
 
 import (
 	"context"
 	"errors"
 	"strings"
 
-	"github.com/redis/go-redis/v9"
+	redisv9 "github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -18,20 +18,20 @@ type tracingHook struct {
 	db     int
 }
 
-func newTracingHook(addr string, db int) redis.Hook {
+func newTracingHook(addr string, db int) redisv9.Hook {
 	return &tracingHook{
-		tracer: otel.Tracer("github.com/freeDog-wy/go-backend-template/internal/infra/cache"),
+		tracer: otel.Tracer("github.com/freeDog-wy/go-backend-template/pkg/redis"),
 		addr:   strings.TrimSpace(addr),
 		db:     db,
 	}
 }
 
-func (h *tracingHook) DialHook(next redis.DialHook) redis.DialHook {
+func (h *tracingHook) DialHook(next redisv9.DialHook) redisv9.DialHook {
 	return next
 }
 
-func (h *tracingHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
-	return func(ctx context.Context, cmd redis.Cmder) error {
+func (h *tracingHook) ProcessHook(next redisv9.ProcessHook) redisv9.ProcessHook {
+	return func(ctx context.Context, cmd redisv9.Cmder) error {
 		if ctx == nil {
 			ctx = context.Background()
 		}
@@ -48,7 +48,7 @@ func (h *tracingHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 		)
 
 		err := next(ctx, cmd)
-		if err != nil && !errors.Is(err, redis.Nil) {
+		if err != nil && !errors.Is(err, redisv9.Nil) {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return err
@@ -59,8 +59,8 @@ func (h *tracingHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 	}
 }
 
-func (h *tracingHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
-	return func(ctx context.Context, cmds []redis.Cmder) error {
+func (h *tracingHook) ProcessPipelineHook(next redisv9.ProcessPipelineHook) redisv9.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redisv9.Cmder) error {
 		if ctx == nil {
 			ctx = context.Background()
 		}
@@ -84,7 +84,7 @@ func (h *tracingHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.
 		}
 
 		err := next(ctx, cmds)
-		if err != nil && !errors.Is(err, redis.Nil) {
+		if err != nil && !errors.Is(err, redisv9.Nil) {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return err

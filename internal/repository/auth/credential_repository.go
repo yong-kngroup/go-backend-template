@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// CredentialRepository 保存用户密码凭据。
 type CredentialRepository struct {
 	db *gorm.DB
 }

@@ -1,4 +1,4 @@
-package cache
+package auth
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// RefreshSessionStore 保存 auth 领域的刷新令牌会话。
 type RefreshSessionStore struct {
 	rdb *redis.Client
 }

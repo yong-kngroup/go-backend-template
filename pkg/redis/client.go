@@ -1,22 +1,22 @@
-// Package cache creates Redis clients used by infrastructure adapters.
-package cache
+package redis
 
 import (
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
-func NewRedis(addr, password string, db int) (*redis.Client, error) {
+// Open 创建带连接池限制和追踪钩子的 Redis 客户端。
+func Open(addr, password string, db int) (*redisv9.Client, error) {
 	if strings.TrimSpace(addr) == "" {
 		return nil, fmt.Errorf("redis address is required")
 	}
 	if db < 0 {
 		return nil, fmt.Errorf("redis database index must not be negative")
 	}
-	rdb := redis.NewClient(&redis.Options{
+	rdb := redisv9.NewClient(&redisv9.Options{
 		Addr:         addr,
 		Password:     password,
 		DB:           db,
