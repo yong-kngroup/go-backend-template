@@ -1,4 +1,12 @@
-.PHONY: server worker cron mcp migrate docker-build docker-server docker-worker docker-cron migrate-up migrate-down migrate-version release-prepare release-check release-tag release-push release project-branch test test-unit test-integration test-db-integration test-redis-integration test-kafka-integration test-s3-integration test-media-integration test-ci test-verbose test-auth test-mq test-bootstrap test-consumption-integration
+.PHONY: \
+	server worker cron mcp migrate \
+	docker-build docker-server docker-worker docker-cron \
+	migrate-up migrate-down migrate-version \
+	release-prepare release-check release-tag release-push release project-branch \
+	test \
+		test-unit test-auth test-mq \
+		test-integration \
+			test-db-integration test-redis-integration test-kafka-integration test-s3-integration test-media-integration  test-bootstrap-integration test-consumption-integration
 
 GO ?= go
 DOCKER ?= docker
@@ -86,12 +94,18 @@ migrate-version:
 ############################################################################
 ############################################################## Tests Commands
 
-test: test-unit
+test: test-unit test-integration
 
 test-unit:
-	$(GO) test ./...
+	$(GO) test -v ./...
 
-test-integration: test-db-integration test-redis-integration test-kafka-integration test-s3-integration test-media-integration
+test-integration: \
+	test-db-integration \
+	test-redis-integration \
+	test-kafka-integration \
+	test-s3-integration \
+	test-media-integration \
+	test-bootstrap-integration
 
 test-db-integration:
 	$(GO) test -tags=integration ./internal/infra/database ./internal/repository/...
@@ -108,21 +122,16 @@ test-s3-integration:
 test-media-integration:
 	$(GO) test -tags=integration ./internal/usecase/cms
 
-test-ci: test-unit test-integration
+test-bootstrap-integration:
+	$(GO) test -tags=integration ./internal/usecase/bootstrap
 
-test-verbose:
-	$(GO) test -v ./...
+test-consumption-integration:
+	$(GO) test -v -tags=integration ./internal/repository/consumption
 
 test-auth:
 	$(GO) test ./internal/usecase/auth
 
 test-mq:
 	$(GO) test ./internal/infra/mq
-
-test-bootstrap:
-	$(GO) test ./internal/usecase/bootstrap
-
-test-consumption-integration:
-	$(GO) test -v -tags=integration ./internal/repository/consumption
 
 ############################################################################
