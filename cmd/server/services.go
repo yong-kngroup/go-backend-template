@@ -49,7 +49,7 @@ func newServerRepositories(db *gorm.DB) *serverRepositories {
 type serverPlatform struct {
 	outbox      *platformOutbox.Repository
 	idempotency *platformIdempotency.Repository
-	audit       *platformAudit.Store
+	audit       *platformAudit.Repository
 }
 
 func newServerPlatform(db *gorm.DB) *serverPlatform {
