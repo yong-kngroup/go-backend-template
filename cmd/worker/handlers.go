@@ -7,7 +7,8 @@ import (
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 	domainIdentity "github.com/freeDog-wy/go-backend-template/internal/domain/identity"
 	domainVerification "github.com/freeDog-wy/go-backend-template/internal/domain/verification"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/consumer"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/event"
 	svcVerification "github.com/freeDog-wy/go-backend-template/internal/usecase/verification"
 )
 
@@ -21,16 +22,16 @@ func newWorkerEventConsumers(cfg *config.Config, infra *workerInfrastructure) *w
 	}
 }
 
-func registerWorkerHandlers(consumer mq.Consumer, handlers *workerEventConsumers) {
+func registerWorkerHandlers(consumer consumer.Consumer, handlers *workerEventConsumers) {
 	consumer.Handle("user.registered", consumeUserRegistered)
-	consumer.Handle("user.email_verification_requested", func(ctx context.Context, message mq.Message) error {
+	consumer.Handle("user.email_verification_requested", func(ctx context.Context, message event.Event) error {
 		var event domainVerification.EmailVerificationRequested
 		if err := json.Unmarshal(message.Payload, &event); err != nil {
 			return err
 		}
 		return handlers.verification.OnEmailVerificationRequested(ctx, event)
 	})
-	consumer.Handle("user.password_reset_requested", func(ctx context.Context, message mq.Message) error {
+	consumer.Handle("user.password_reset_requested", func(ctx context.Context, message event.Event) error {
 		var event domainVerification.PasswordResetRequested
 		if err := json.Unmarshal(message.Payload, &event); err != nil {
 			return err
@@ -39,7 +40,7 @@ func registerWorkerHandlers(consumer mq.Consumer, handlers *workerEventConsumers
 	})
 }
 
-func consumeUserRegistered(_ context.Context, message mq.Message) error {
+func consumeUserRegistered(_ context.Context, message event.Event) error {
 	var event domainIdentity.Registered
 	return json.Unmarshal(message.Payload, &event)
 }

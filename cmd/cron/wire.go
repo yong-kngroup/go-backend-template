@@ -8,7 +8,7 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 	hdlHealth "github.com/freeDog-wy/go-backend-template/internal/handler/health"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	kafkaHealth "github.com/freeDog-wy/go-backend-template/internal/infra/kafka/health"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"github.com/freeDog-wy/go-backend-template/pkg/scheduler"
@@ -78,7 +78,7 @@ func initCronApp(cfg *config.Config) (*CronApp, error) {
 		}
 		checks["database"] = hdlHealth.CheckFunc(runtime.sqlDB.PingContext)
 		checks["kafka"] = hdlHealth.CheckFunc(func(ctx context.Context) error {
-			return mq.PingKafka(ctx, cfg.MQ.Kafka.Brokers)
+			return kafkaHealth.Ping(ctx, cfg.MQ.Kafka.Brokers)
 		})
 		if err := registerCronJobs(cfg, infra, runtime); err != nil {
 			return nil, err

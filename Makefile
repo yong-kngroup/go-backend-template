@@ -114,7 +114,7 @@ test-redis-integration:
 	$(GO) test -tags=integration ./internal/repository/auth ./pkg/captcha ./pkg/ratelimit
 
 test-kafka-integration:
-	$(GO) test -tags=integration ./internal/infra/mq
+	$(GO) test -tags=integration ./internal/infra/kafka
 
 test-s3-integration:
 	$(GO) test -tags=integration ./internal/infra/storage
@@ -132,6 +132,6 @@ test-auth:
 	$(GO) test ./internal/usecase/auth
 
 test-mq:
-	$(GO) test ./internal/infra/mq
+	$(GO) test ./internal/infra/kafka
 
 ############################################################################

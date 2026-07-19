@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	kafkaConfig "github.com/freeDog-wy/go-backend-template/internal/infra/kafka/config"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/consumer"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/dlq"
 	platformMessaging "github.com/freeDog-wy/go-backend-template/internal/platform/messaging"
-	"github.com/freeDog-wy/go-backend-template/pkg/kafka"
 	"gorm.io/gorm"
 )
 
@@ -21,24 +22,24 @@ func newWorkerPlatform(db *gorm.DB) *workerPlatform {
 	}
 }
 
-func newWorkerConsumer(cfg *config.Config, infra *workerInfrastructure, platform *workerPlatform) (mq.Consumer, error) {
-	consumer, err := mq.NewConsumer(workerConsumerOptions(cfg), platform.consumption, infra.logger)
+func newWorkerConsumer(cfg *config.Config, infra *workerInfrastructure, platform *workerPlatform) (consumer.Consumer, error) {
+	consumer, err := consumer.New(workerConsumerOptions(cfg), platform.consumption, infra.logger)
 	if err != nil {
 		return nil, fmt.Errorf("initialize kafka consumer: %w", err)
 	}
 	return consumer, nil
 }
 
-func workerConsumerOptions(cfg *config.Config) mq.ConsumerOptions {
-	retryLevels := make([]kafka.RetryLevel, 0, len(cfg.Worker.KafkaRetryTopics))
+func workerConsumerOptions(cfg *config.Config) kafkaConfig.Consumer {
+	retryLevels := make([]kafkaConfig.RetryLevel, 0, len(cfg.Worker.KafkaRetryTopics))
 	for _, level := range cfg.Worker.KafkaRetryTopics {
-		retryLevels = append(retryLevels, kafka.RetryLevel{
+		retryLevels = append(retryLevels, kafkaConfig.RetryLevel{
 			Topic: level.Topic,
 			Delay: time.Duration(level.DelaySeconds) * time.Second,
 		})
 	}
-	return mq.ConsumerOptions{
-		KafkaOptions: mq.KafkaOptions{
+	return kafkaConfig.Consumer{
+		Connection: kafkaConfig.Connection{
 			Brokers:  cfg.MQ.Kafka.Brokers,
 			Topic:    cfg.MQ.EventsName,
 			ClientID: cfg.MQ.Kafka.ClientID,
@@ -50,6 +51,6 @@ func workerConsumerOptions(cfg *config.Config) mq.ConsumerOptions {
 		MaxBytes:          cfg.Worker.KafkaReadMaxBytes,
 		MaxWait:           time.Duration(cfg.Worker.KafkaMaxWaitSeconds) * time.Second,
 		RetryLevels:       retryLevels,
-		DeadLetterTopic:   mq.ResolveDeadLetterTopic(cfg.MQ.EventsName, cfg.Worker.KafkaDeadLetterTopic),
+		DeadLetterTopic:   dlq.ResolveTopic(cfg.MQ.EventsName, cfg.Worker.KafkaDeadLetterTopic),
 	}
 }

@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	kafkaConfig "github.com/freeDog-wy/go-backend-template/internal/infra/kafka/config"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/producer"
 	platformOutbox "github.com/freeDog-wy/go-backend-template/internal/platform/outbox"
 	baseRepository "github.com/freeDog-wy/go-backend-template/internal/repository"
 	repoMedia "github.com/freeDog-wy/go-backend-template/internal/repository/media"
@@ -52,7 +53,7 @@ func registerCronJobs(cfg *config.Config, infra *cronInfrastructure, runtime *cr
 }
 
 func newCronJobServices(cfg *config.Config, infra *cronInfrastructure, runtime *cronRuntimeInfrastructure) (*cronJobServices, error) {
-	publisher, err := mq.NewPublisher(mq.KafkaOptions{
+	publisher, err := producer.New(kafkaConfig.Connection{
 		Brokers:  cfg.MQ.Kafka.Brokers,
 		Topic:    cfg.MQ.EventsName,
 		ClientID: cfg.MQ.Kafka.ClientID,
@@ -63,7 +64,7 @@ func newCronJobServices(cfg *config.Config, infra *cronInfrastructure, runtime *
 	return &cronJobServices{
 		outboxPublisher: platformOutbox.NewOutboxPublisher(
 			platformOutbox.New(runtime.db),
-			mq.NewOutboxPublisherAdapter(publisher),
+			producer.NewOutboxAdapter(publisher),
 			infra.logger,
 			cfg.Cron.OutboxBatchSize,
 			time.Duration(cfg.Cron.OutboxClaimTTLSeconds)*time.Second,

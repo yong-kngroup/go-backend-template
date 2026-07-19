@@ -8,13 +8,14 @@ import (
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
 	hdlHealth "github.com/freeDog-wy/go-backend-template/internal/handler/health"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/consumer"
+	kafkaHealth "github.com/freeDog-wy/go-backend-template/internal/infra/kafka/health"
 	"github.com/freeDog-wy/go-backend-template/internal/infra/tracing"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type Worker struct {
-	consumer    mq.Consumer
+	consumer    consumer.Consumer
 	probeServer *hdlHealth.Server
 	running     atomic.Bool
 	tp          *sdktrace.TracerProvider
@@ -60,7 +61,7 @@ func initWorker(cfg *config.Config) (*Worker, error) {
 		}),
 		"database": hdlHealth.CheckFunc(infra.sqlDB.PingContext),
 		"kafka": hdlHealth.CheckFunc(func(ctx context.Context) error {
-			return mq.PingKafka(ctx, cfg.MQ.Kafka.Brokers)
+			return kafkaHealth.Ping(ctx, cfg.MQ.Kafka.Brokers)
 		}),
 	}, 2*time.Second)
 	registerWorkerHandlers(consumer, handlers)

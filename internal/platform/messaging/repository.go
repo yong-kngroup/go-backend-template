@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/consumer"
 	repositorytx "github.com/freeDog-wy/go-backend-template/internal/repository"
 
 	"gorm.io/gorm"
@@ -17,7 +17,7 @@ type Repository struct {
 	db *gorm.DB
 }
 
-var _ mq.ConsumptionStore = (*Repository)(nil)
+var _ consumer.ConsumptionStore = (*Repository)(nil)
 
 func New(db *gorm.DB) *Repository {
 	return &Repository{db: db}
@@ -25,19 +25,19 @@ func New(db *gorm.DB) *Repository {
 
 // Begin 使用唯一约束建立首个消费记录；冲突时持有行锁判断锁状态或恢复可重试记录。
 // 该过程必须是原子的，避免同一 consumer group 内的多个 worker 并发执行副作用。
-func (r *Repository) Begin(ctx context.Context, command mq.ConsumptionBegin) (mq.ConsumptionBeginResult, error) {
+func (r *Repository) Begin(ctx context.Context, command consumer.ConsumptionBegin) (consumer.ConsumptionBeginResult, error) {
 	if !validConsumptionBegin(command) {
-		return mq.ConsumptionBeginResult{}, errInvalidConsumptionRecord
+		return consumer.ConsumptionBeginResult{}, errInvalidConsumptionRecord
 	}
 
-	var result mq.ConsumptionBeginResult
+	var result consumer.ConsumptionBeginResult
 	err := repositorytx.DB(ctx, r.db).Transaction(func(tx *gorm.DB) error {
 		model := &RecordModel{
 			ConsumerGroup: command.ConsumerGroup,
 			MessageKey:    command.MessageKey,
 			EventName:     command.EventName,
 			TraceID:       strings.TrimSpace(command.TraceID),
-			Status:        string(mq.ConsumptionStatusProcessing),
+			Status:        string(consumer.ConsumptionStatusProcessing),
 			AttemptCount:  1,
 			LockedUntil:   new(command.LockedUntil),
 			CreatedAt:     command.AttemptedAt,
@@ -52,8 +52,8 @@ func (r *Repository) Begin(ctx context.Context, command mq.ConsumptionBegin) (mq
 			return createResult.Error
 		}
 		if createResult.RowsAffected > 0 {
-			result = mq.ConsumptionBeginResult{
-				Decision:     mq.ConsumptionDecisionAcquired,
+			result = consumer.ConsumptionBeginResult{
+				Decision:     consumer.ConsumptionDecisionAcquired,
 				AttemptCount: 1,
 			}
 			return nil
@@ -66,17 +66,17 @@ func (r *Repository) Begin(ctx context.Context, command mq.ConsumptionBegin) (mq
 			return err
 		}
 
-		switch mq.ConsumptionStatus(existing.Status) {
-		case mq.ConsumptionStatusDone, mq.ConsumptionStatusDead:
-			result = mq.ConsumptionBeginResult{
-				Decision:     mq.ConsumptionDecisionDone,
+		switch consumer.ConsumptionStatus(existing.Status) {
+		case consumer.ConsumptionStatusDone, consumer.ConsumptionStatusDead:
+			result = consumer.ConsumptionBeginResult{
+				Decision:     consumer.ConsumptionDecisionDone,
 				AttemptCount: existing.AttemptCount,
 			}
 			return nil
-		case mq.ConsumptionStatusProcessing:
+		case consumer.ConsumptionStatusProcessing:
 			if existing.LockedUntil != nil && existing.LockedUntil.After(command.AttemptedAt) {
-				result = mq.ConsumptionBeginResult{
-					Decision:     mq.ConsumptionDecisionLocked,
+				result = consumer.ConsumptionBeginResult{
+					Decision:     consumer.ConsumptionDecisionLocked,
 					AttemptCount: existing.AttemptCount,
 				}
 				return nil
@@ -89,7 +89,7 @@ func (r *Repository) Begin(ctx context.Context, command mq.ConsumptionBegin) (mq
 			Updates(map[string]any{
 				"event_name":    command.EventName,
 				"trace_id":      strings.TrimSpace(command.TraceID),
-				"status":        string(mq.ConsumptionStatusProcessing),
+				"status":        string(consumer.ConsumptionStatusProcessing),
 				"attempt_count": nextAttempt,
 				"last_error":    "",
 				"locked_until":  command.LockedUntil,
@@ -99,8 +99,8 @@ func (r *Repository) Begin(ctx context.Context, command mq.ConsumptionBegin) (mq
 			return err
 		}
 
-		result = mq.ConsumptionBeginResult{
-			Decision:     mq.ConsumptionDecisionAcquired,
+		result = consumer.ConsumptionBeginResult{
+			Decision:     consumer.ConsumptionDecisionAcquired,
 			AttemptCount: nextAttempt,
 		}
 		return nil
@@ -118,7 +118,7 @@ func (r *Repository) MarkDone(ctx context.Context, consumerGroup, messageKey str
 		Model(&RecordModel{}).
 		Where("consumer_group = ? AND message_key = ?", consumerGroup, messageKey).
 		Updates(map[string]any{
-			"status":       string(mq.ConsumptionStatusDone),
+			"status":       string(consumer.ConsumptionStatusDone),
 			"processed_at": processedAt,
 			"locked_until": nil,
 			"last_error":   "",
@@ -136,7 +136,7 @@ func (r *Repository) MarkFailed(ctx context.Context, consumerGroup, messageKey, 
 		Model(&RecordModel{}).
 		Where("consumer_group = ? AND message_key = ?", consumerGroup, messageKey).
 		Updates(map[string]any{
-			"status":       string(mq.ConsumptionStatusFailed),
+			"status":       string(consumer.ConsumptionStatusFailed),
 			"locked_until": nil,
 			"last_error":   strings.TrimSpace(lastError),
 			"updated_at":   failedAt,
@@ -153,14 +153,14 @@ func (r *Repository) MarkDead(ctx context.Context, consumerGroup, messageKey, la
 		Model(&RecordModel{}).
 		Where("consumer_group = ? AND message_key = ?", consumerGroup, messageKey).
 		Updates(map[string]any{
-			"status":       string(mq.ConsumptionStatusDead),
+			"status":       string(consumer.ConsumptionStatusDead),
 			"locked_until": nil,
 			"last_error":   strings.TrimSpace(lastError),
 			"updated_at":   failedAt,
 		}).Error
 }
 
-func validConsumptionBegin(command mq.ConsumptionBegin) bool {
+func validConsumptionBegin(command consumer.ConsumptionBegin) bool {
 	return strings.TrimSpace(command.ConsumerGroup) != "" &&
 		strings.TrimSpace(command.MessageKey) != "" &&
 		strings.TrimSpace(command.EventName) != "" &&

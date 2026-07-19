@@ -4,7 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/dlq"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/event"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -14,8 +15,8 @@ import (
 var deadLetterTracer = otel.Tracer("github.com/freeDog-wy/go-backend-template/internal/platform/messaging")
 
 type DeadLetterService struct {
-	inspector           mq.DeadLetterInspector
-	replayer            mq.DeadLetterReplayer
+	inspector           dlq.Inspector
+	replayer            dlq.Replayer
 	logger              logger.Logger
 	inspectionBatchSize int
 	replayBatchSize     int
@@ -23,8 +24,8 @@ type DeadLetterService struct {
 }
 
 func NewDeadLetterService(
-	inspector mq.DeadLetterInspector,
-	replayer mq.DeadLetterReplayer,
+	inspector dlq.Inspector,
+	replayer dlq.Replayer,
 	appLogger logger.Logger,
 	inspectionBatchSize int,
 	replayBatchSize int,
@@ -106,7 +107,7 @@ func (u *DeadLetterService) ReplayDeadLetters(ctx context.Context) (err error) {
 		return nil
 	}
 
-	result, err := u.replayer.Replay(ctx, mq.DeadLetterReplayRequest{
+	result, err := u.replayer.Replay(ctx, dlq.ReplayRequest{
 		BatchSize:   u.replayBatchSize,
 		TargetTopic: u.replayTargetTopic,
 	})
@@ -131,9 +132,9 @@ func (u *DeadLetterService) ReplayDeadLetters(ctx context.Context) (err error) {
 	return nil
 }
 
-func deadLetterAggregateKey(message mq.DeadLetterMessage) string {
+func deadLetterAggregateKey(message event.DeadLetter) string {
 	return strings.Join([]string{
-		strings.TrimSpace(message.Event),
+		strings.TrimSpace(message.Message.Event),
 		strings.TrimSpace(message.ConsumerGroup),
 		strings.TrimSpace(message.Reason),
 	}, "\x00")

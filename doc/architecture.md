@@ -82,9 +82,9 @@ Kafka record
 
 关键入口：
 
-- Kafka 消费适配器：`internal/infra/mq/consumer_adapter.go`。
+- Kafka 消费适配器：`internal/infra/kafka/consumer_adapter.go`。
 - 消费状态与持久化：`internal/platform/messaging`。
-- 死信巡检与回放流程：`internal/platform/messaging`；Kafka 死信读写：`internal/infra/mq/dead_letter_adapter.go`。
+- 死信巡检与回放流程：`internal/platform/messaging`；Kafka 死信读写：`internal/infra/kafka/dead_letter_adapter.go`。
 
 ## 幂等、认证与授权
 

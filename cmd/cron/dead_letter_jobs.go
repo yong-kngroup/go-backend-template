@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/freeDog-wy/go-backend-template/internal/config"
-	"github.com/freeDog-wy/go-backend-template/internal/infra/mq"
+	kafkaConfig "github.com/freeDog-wy/go-backend-template/internal/infra/kafka/config"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/dlq"
 	platformMessaging "github.com/freeDog-wy/go-backend-template/internal/platform/messaging"
-	"github.com/freeDog-wy/go-backend-template/pkg/kafka"
 	"github.com/freeDog-wy/go-backend-template/pkg/logger"
 	"github.com/freeDog-wy/go-backend-template/pkg/scheduler"
 )
@@ -25,7 +25,7 @@ func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *s
 			return fmt.Errorf("cron.dlq_inspection_group must not be empty")
 		}
 
-		inspector, err := mq.NewDeadLetterInspector(deadLetterOptions(cfg, cfg.Cron.DLQInspectionGroup), appLogger)
+		inspector, err := dlq.NewInspector(deadLetterOptions(cfg, cfg.Cron.DLQInspectionGroup), appLogger)
 		if err != nil {
 			return fmt.Errorf("initialize kafka dead letter inspector: %w", err)
 		}
@@ -50,11 +50,11 @@ func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *s
 			return fmt.Errorf("cron.dlq_replay_group must not be empty")
 		}
 
-		replayer, err := mq.NewDeadLetterReplayer(deadLetterOptions(cfg, cfg.Cron.DLQReplayGroup), appLogger)
+		replayer, err := dlq.NewReplayer(deadLetterOptions(cfg, cfg.Cron.DLQReplayGroup), appLogger)
 		if err != nil {
 			return fmt.Errorf("initialize kafka dead letter replayer: %w", err)
 		}
-		target, err := mq.ResolveDeadLetterReplayTarget(cfg.MQ.EventsName, cfg.Cron.DLQReplayTarget, retryLevels(cfg))
+		target, err := dlq.ResolveReplayTarget(cfg.MQ.EventsName, cfg.Cron.DLQReplayTarget, retryLevels(cfg))
 		if err != nil {
 			return err
 		}
@@ -70,11 +70,11 @@ func registerKafkaDLQJobs(cfg *config.Config, appLogger logger.Logger, runner *s
 	return nil
 }
 
-func deadLetterOptions(cfg *config.Config, groupID string) mq.DeadLetterOptions {
-	return mq.DeadLetterOptions{
-		KafkaOptions: mq.KafkaOptions{
+func deadLetterOptions(cfg *config.Config, groupID string) kafkaConfig.DeadLetter {
+	return kafkaConfig.DeadLetter{
+		Connection: kafkaConfig.Connection{
 			Brokers:  cfg.MQ.Kafka.Brokers,
-			Topic:    mq.ResolveDeadLetterTopic(cfg.MQ.EventsName, cfg.Worker.KafkaDeadLetterTopic),
+			Topic:    dlq.ResolveTopic(cfg.MQ.EventsName, cfg.Worker.KafkaDeadLetterTopic),
 			ClientID: cfg.MQ.Kafka.ClientID,
 		},
 		GroupID:     strings.TrimSpace(groupID),
@@ -85,10 +85,10 @@ func deadLetterOptions(cfg *config.Config, groupID string) mq.DeadLetterOptions 
 	}
 }
 
-func retryLevels(cfg *config.Config) []kafka.RetryLevel {
-	levels := make([]kafka.RetryLevel, 0, len(cfg.Worker.KafkaRetryTopics))
+func retryLevels(cfg *config.Config) []kafkaConfig.RetryLevel {
+	levels := make([]kafkaConfig.RetryLevel, 0, len(cfg.Worker.KafkaRetryTopics))
 	for _, level := range cfg.Worker.KafkaRetryTopics {
-		levels = append(levels, kafka.RetryLevel{Topic: level.Topic, Delay: time.Duration(level.DelaySeconds) * time.Second})
+		levels = append(levels, kafkaConfig.RetryLevel{Topic: level.Topic, Delay: time.Duration(level.DelaySeconds) * time.Second})
 	}
 	return levels
 }
