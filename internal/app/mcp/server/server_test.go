@@ -33,10 +33,10 @@ func TestFilterArticleStatus(t *testing.T) {
 }
 
 func TestOperationalInputValidation(t *testing.T) {
-	if err := validateArticleReference(articleReferenceInput{ArticleID: 7, Locale: "zh-CN", OperationID: "operation-1"}, true); err != nil {
+	if err := validateArticleReference(articleReferenceInput{ArticleID: 7, Locale: "zh-CN"}); err != nil {
 		t.Fatalf("validateArticleReference() error = %v", err)
 	}
-	if err := validateArticleReference(articleReferenceInput{ArticleID: 7}, true); err == nil {
+	if err := validateArticleReference(articleReferenceInput{ArticleID: 7}); err == nil {
 		t.Fatal("validateArticleReference() accepted missing locale")
 	}
 	if err := validateNamedTranslation("zh-CN", "Engineering", "engineering"); err != nil {
@@ -44,6 +44,21 @@ func TestOperationalInputValidation(t *testing.T) {
 	}
 	if err := validateNamedTranslation("zh-CN", "", "engineering"); err == nil {
 		t.Fatal("validateNamedTranslation() accepted missing name")
+	}
+}
+
+func TestOperationIDForUsesHostValueOrSessionFingerprint(t *testing.T) {
+	input := articleIDInput{ArticleID: 7}
+	if got := operationIDFor("session-1", "host-operation", "cms.article.restore", input); got != "host-operation" {
+		t.Fatalf("host operation ID = %q", got)
+	}
+	first := operationIDFor("session-1", "", "cms.article.restore", input)
+	second := operationIDFor("session-1", "", "cms.article.restore", input)
+	if first != second {
+		t.Fatalf("same session and input generated %q and %q", first, second)
+	}
+	if changed := operationIDFor("session-1", "", "cms.article.restore", articleIDInput{ArticleID: 8}); changed == first {
+		t.Fatalf("different input generated identical operation ID %q", changed)
 	}
 }
 

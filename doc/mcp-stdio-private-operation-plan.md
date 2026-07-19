@@ -204,7 +204,7 @@ CMS 服务端仍保留自己的 `mcp` 配置，用于服务账号 bootstrap、JW
 
 `publish`、`archive` 及未来的 `delete`、分类移动工具必须标记为写操作。Codex 的 `default_tools_approval_mode = "writes"` 是第一道人工确认；服务端仍须执行状态机、权限和输入校验。
 
-`cms.article.publish` 不接收由模型编造的“已确认”布尔值。建议其输入只包含文章 ID、locale 和可选幂等键；操作前由 `preview_publish` 展示标题、slug、当前状态、计划发布语言和发布时间，再由 Codex 的写操作确认流程决定是否调用发布工具。
+`cms.article.publish` 不接收由模型编造的“已确认”布尔值或幂等键。其输入只包含文章 ID 和 locale；操作前由 `preview_publish` 展示标题、slug、当前状态、计划发布语言和发布时间，再由 Codex 的写操作确认流程决定是否调用发布工具。
 
 ### 5.3 Prompts
 
@@ -223,12 +223,12 @@ Prompts 只提供可复用操作流程，不携带凭证也不绕过工具确认
   -> cms.article.get_translation / cms.article.preview_publish
   -> Codex 展示待发布摘要
   -> 用户确认写操作
-  -> cms.article.publish(article_id, locale, idempotency_key)
+  -> cms.article.publish(article_id, locale)
   -> CMS JWT/RBAC/状态机校验
   -> 审计事件与结果返回
 ```
 
-MCP 应为每次写操作生成 `idempotency_key` 和 `correlation_id`。若现有 CMS 发布接口尚不支持幂等键，需要先在 HTTP handler/usecase 层增加幂等语义或明确发布操作可安全重复后，才开放该工具。
+MCP Server 为每次写操作生成内部 `idempotency_key` 和 `correlation_id`。它优先使用 MCP host 在请求 `_meta` 中提供的 `idempotency_key`；否则基于 MCP session、工具名和规范化业务参数派生短期 key。AI 不得构造或传递该 key。若现有 CMS 发布接口尚不支持幂等键，需要先在 HTTP handler/usecase 层增加幂等语义或明确发布操作可安全重复后，才开放该工具。
 
 日志与审计至少记录：
 
