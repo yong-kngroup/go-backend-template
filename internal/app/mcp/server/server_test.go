@@ -45,6 +45,12 @@ func TestOperationalInputValidation(t *testing.T) {
 	if err := validateNamedTranslation("zh-CN", "", "engineering"); err == nil {
 		t.Fatal("validateNamedTranslation() accepted missing name")
 	}
+	if err := validateLocaleInput("en-US", "English (United States)"); err != nil {
+		t.Fatalf("validateLocaleInput() error = %v", err)
+	}
+	if err := validateLocaleInput("en_US", "English"); err == nil {
+		t.Fatal("validateLocaleInput() accepted an invalid code")
+	}
 }
 
 func TestOperationIDForUsesHostValueOrSessionFingerprint(t *testing.T) {
@@ -89,6 +95,8 @@ func TestServerRegistersOperationalToolsAndPrompts(t *testing.T) {
 		"cms.category.upsert_translation": false,
 		"cms.tag.create":                  false,
 		"cms.tag.upsert_translation":      false,
+		"cms.locale.create":               false,
+		"cms.locale.update":               false,
 	}
 	for tool, err := range clientSession.Tools(ctx, nil) {
 		if err != nil {

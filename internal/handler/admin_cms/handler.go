@@ -156,7 +156,7 @@ func (h *Handler) CreateLocale(c *gin.Context) {
 		return
 	}
 	meta := handler.AuditMetaFromRequest(c)
-	result, err := h.cms.CreateLocale(c, svcCMS.CreateLocaleCmd{Code: req.Code, Name: req.Name, SortOrder: req.SortOrder, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent})
+	result, err := h.cms.CreateLocale(c, svcCMS.CreateLocaleCmd{Code: req.Code, Name: req.Name, IsEnabled: req.IsEnabled, SortOrder: req.SortOrder, ActorUserID: handlerMiddleware.CurrentUserID(c), IP: meta.IP, UserAgent: meta.UserAgent})
 	if err != nil {
 		fail(c, err)
 		return

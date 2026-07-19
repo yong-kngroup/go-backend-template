@@ -66,6 +66,20 @@ type TagTranslationInput struct {
 	Slug string `json:"slug"`
 }
 
+type LocaleCreateInput struct {
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+	IsEnabled bool   `json:"is_enabled"`
+	SortOrder int    `json:"sort_order"`
+}
+
+type LocaleUpdateInput struct {
+	Name      string `json:"name"`
+	IsEnabled bool   `json:"is_enabled"`
+	SortOrder int    `json:"sort_order"`
+	IsDefault bool   `json:"is_default"`
+}
+
 type TokenProvider interface {
 	Token(context.Context) (string, error)
 }
@@ -118,6 +132,14 @@ func (c *Client) Health(ctx context.Context) (json.RawMessage, error) {
 
 func (c *Client) Locales(ctx context.Context) (json.RawMessage, error) {
 	return c.getAdmin(ctx, "/api/v1/admin/cms/locales", nil)
+}
+
+func (c *Client) CreateLocale(ctx context.Context, input LocaleCreateInput) (json.RawMessage, error) {
+	return c.write(ctx, http.MethodPost, "/api/v1/admin/cms/locales", input)
+}
+
+func (c *Client) UpdateLocale(ctx context.Context, code string, input LocaleUpdateInput) (json.RawMessage, error) {
+	return c.write(ctx, http.MethodPatch, "/api/v1/admin/cms/locales/"+url.PathEscape(code), input)
 }
 
 func (c *Client) Categories(ctx context.Context, locale string) (json.RawMessage, error) {

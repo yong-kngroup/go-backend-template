@@ -159,6 +159,20 @@ func TestOperationalWritesUseExpectedCMSRoutes(t *testing.T) {
 				return err
 			},
 		},
+		{
+			name: "create locale", method: http.MethodPost, path: "/api/v1/admin/cms/locales", bodyHas: `"is_enabled":false`,
+			call: func(ctx context.Context, c *Client) error {
+				_, err := c.CreateLocale(ctx, LocaleCreateInput{Code: "en-US", Name: "English", IsEnabled: false})
+				return err
+			},
+		},
+		{
+			name: "update locale", method: http.MethodPatch, path: "/api/v1/admin/cms/locales/en-US", bodyHas: `"is_default":true`,
+			call: func(ctx context.Context, c *Client) error {
+				_, err := c.UpdateLocale(ctx, "en-US", LocaleUpdateInput{Name: "English", IsEnabled: true, SortOrder: 1, IsDefault: true})
+				return err
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

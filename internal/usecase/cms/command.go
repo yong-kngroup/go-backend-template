@@ -81,6 +81,7 @@ type ListPublicRedirectsCmd struct {
 }
 type CreateLocaleCmd struct {
 	Code, Name    string
+	IsEnabled     bool
 	SortOrder     int
 	ActorUserID   uint
 	IP, UserAgent string

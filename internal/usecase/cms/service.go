@@ -137,7 +137,7 @@ func (s *Service) CreateLocale(ctx context.Context, cmd CreateLocaleCmd) (*Local
 	if !validLocale(code) || name == "" {
 		return nil, domainCMS.ErrInvalidInput
 	}
-	locale := &domainCMS.Locale{Code: code, Name: name, IsEnabled: true, SortOrder: cmd.SortOrder}
+	locale := &domainCMS.Locale{Code: code, Name: name, IsEnabled: cmd.IsEnabled, SortOrder: cmd.SortOrder}
 	if err := s.tx.Do(ctx, func(ctx context.Context) error {
 		if err := s.repo.CreateLocale(ctx, locale); err != nil {
 			return err
@@ -171,8 +171,8 @@ func (s *Service) UpdateLocale(ctx context.Context, cmd UpdateLocaleCmd) (*Local
 	if cmd.IsDefault && !cmd.IsEnabled {
 		return nil, domainCMS.ErrInvalidInput
 	}
-	locale.Name, locale.IsEnabled, locale.SortOrder = strings.TrimSpace(cmd.Name), cmd.IsEnabled, cmd.SortOrder
 	oldName, oldEnabled, oldSortOrder, oldDefault := locale.Name, locale.IsEnabled, locale.SortOrder, locale.IsDefault
+	locale.Name, locale.IsEnabled, locale.SortOrder = strings.TrimSpace(cmd.Name), cmd.IsEnabled, cmd.SortOrder
 	if err := s.tx.Do(ctx, func(ctx context.Context) error {
 		if err := s.repo.UpdateLocale(ctx, locale); err != nil {
 			return err

@@ -48,6 +48,7 @@ type testRepo struct {
 	replaced     []uint
 	publicList   []*domainCMS.PublicArticleListItem
 	locale       *domainCMS.Locale
+	createdLocale *domainCMS.Locale
 	enabledCount int64
 	article      *domainCMS.Article
 	locales      []*domainCMS.Locale
@@ -71,7 +72,10 @@ func (r *testRepo) FindLocale(_ context.Context, _ string) (*domainCMS.Locale, e
 	}
 	return r.locale, nil
 }
-func (*testRepo) CreateLocale(context.Context, *domainCMS.Locale) error { return nil }
+func (r *testRepo) CreateLocale(_ context.Context, locale *domainCMS.Locale) error {
+	r.createdLocale = locale
+	return nil
+}
 func (*testRepo) UpdateLocale(context.Context, *domainCMS.Locale) error { return nil }
 func (*testRepo) SetDefaultLocale(context.Context, string) error        { return nil }
 func (r *testRepo) CountEnabledLocales(context.Context) (int64, error) {
@@ -356,6 +360,28 @@ func TestUpdateLocaleRejectsDisablingDefault(t *testing.T) {
 	_, err := New(testTx{}, repo).UpdateLocale(context.Background(), UpdateLocaleCmd{Code: "zh-CN", Name: "Chinese", IsEnabled: false})
 	if !errors.Is(err, domainCMS.ErrLocaleDefault) {
 		t.Fatalf("error = %v", err)
+	}
+}
+func TestCreateLocaleDefaultsToDisabled(t *testing.T) {
+	repo := &testRepo{}
+	result, err := New(testTx{}, repo).CreateLocale(context.Background(), CreateLocaleCmd{Code: "en-US", Name: "English"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.createdLocale == nil || repo.createdLocale.IsEnabled || result.IsEnabled {
+		t.Fatalf("created locale = %#v, result = %#v", repo.createdLocale, result)
+	}
+}
+func TestUpdateLocaleAuditIncludesPriorValues(t *testing.T) {
+	bus := &recordingEventBus{}
+	repo := &testRepo{locale: &domainCMS.Locale{Code: "en-US", Name: "English", IsEnabled: false, SortOrder: 2}}
+	svc := New(testTx{}, repo)
+	svc.SetAuditRecorder(bus)
+	if _, err := svc.UpdateLocale(context.Background(), UpdateLocaleCmd{Code: "en-US", Name: "English (US)", IsEnabled: true, SortOrder: 3}); err != nil {
+		t.Fatal(err)
+	}
+	if len(bus.records) != 1 || bus.records[0].Metadata["old_name"] != "English" || bus.records[0].Metadata["old_enabled"] != false || bus.records[0].Metadata["old_sort_order"] != 2 {
+		t.Fatalf("audit records = %#v", bus.records)
 	}
 }
 func TestUpdateLocaleRejectsDisablingLastEnabledLocale(t *testing.T) {

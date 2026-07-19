@@ -17,6 +17,8 @@ import (
 type CMSReader interface {
 	Health(context.Context) (json.RawMessage, error)
 	Locales(context.Context) (json.RawMessage, error)
+	CreateLocale(context.Context, mcpclient.LocaleCreateInput) (json.RawMessage, error)
+	UpdateLocale(context.Context, string, mcpclient.LocaleUpdateInput) (json.RawMessage, error)
 	Categories(context.Context, string) (json.RawMessage, error)
 	Tags(context.Context, string, int, int) (json.RawMessage, error)
 	Articles(context.Context, string, int, int) (json.RawMessage, error)
@@ -124,6 +126,19 @@ type tagTranslationInput struct {
 	Locale string `json:"locale" jsonschema:"translation locale"`
 	Name   string `json:"name" jsonschema:"tag name"`
 	Slug   string `json:"slug" jsonschema:"tag slug"`
+}
+type localeCreateInput struct {
+	Code      string `json:"code" jsonschema:"BCP 47-like locale code, such as en-US"`
+	Name      string `json:"name" jsonschema:"human-readable locale name"`
+	IsEnabled bool   `json:"is_enabled" jsonschema:"whether this locale is immediately visible publicly"`
+	SortOrder int    `json:"sort_order,omitempty" jsonschema:"display order"`
+}
+type localeUpdateInput struct {
+	Code         string `json:"code" jsonschema:"existing locale code"`
+	Name         string `json:"name" jsonschema:"human-readable locale name"`
+	IsEnabled    bool   `json:"is_enabled" jsonschema:"whether this locale is visible publicly"`
+	SortOrder    int    `json:"sort_order,omitempty" jsonschema:"display order"`
+	SetAsDefault bool   `json:"set_as_default,omitempty" jsonschema:"make this enabled locale the default locale"`
 }
 
 func New(client CMSReader) *mcp.Server {
@@ -298,6 +313,18 @@ func New(client CMSReader) *mcp.Server {
 		}
 		return toolOutput(client.UpsertTagTranslation(writeContext(ctx, req, "cms.tag.upsert_translation", input), input.TagID, input.Locale, mcpclient.TagTranslationInput{Name: input.Name, Slug: input.Slug}))
 	})
+	mcp.AddTool(server, &mcp.Tool{Name: "cms.locale.create", Description: "Create one CMS locale. Disabled locales remain unavailable publicly until enabled. Confirm the locale code, name, and initial enabled state with the user before calling.", Annotations: write}, func(ctx context.Context, req *mcp.CallToolRequest, input localeCreateInput) (*mcp.CallToolResult, map[string]any, error) {
+		if err := validateLocaleInput(input.Code, input.Name); err != nil {
+			return toolError("INVALID_INPUT", err.Error()), nil, nil
+		}
+		return toolOutput(client.CreateLocale(writeContext(ctx, req, "cms.locale.create", input), mcpclient.LocaleCreateInput{Code: input.Code, Name: input.Name, IsEnabled: input.IsEnabled, SortOrder: input.SortOrder}))
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: "cms.locale.update", Description: "Update a CMS locale's name, public enabled state, display order, or default status. Confirm the full target state with the user before calling.", Annotations: write}, func(ctx context.Context, req *mcp.CallToolRequest, input localeUpdateInput) (*mcp.CallToolResult, map[string]any, error) {
+		if err := validateLocaleInput(input.Code, input.Name); err != nil {
+			return toolError("INVALID_INPUT", err.Error()), nil, nil
+		}
+		return toolOutput(client.UpdateLocale(writeContext(ctx, req, "cms.locale.update", input), input.Code, mcpclient.LocaleUpdateInput{Name: input.Name, IsEnabled: input.IsEnabled, SortOrder: input.SortOrder, IsDefault: input.SetAsDefault}))
+	})
 	return server
 }
 
@@ -321,6 +348,22 @@ func validateArticleInput(input articleWriteInput, requireID bool) error {
 func validateArticleReference(input articleReferenceInput) error {
 	if input.ArticleID == 0 || strings.TrimSpace(input.Locale) == "" {
 		return fmt.Errorf("article_id and locale are required")
+	}
+	return nil
+}
+
+func validateLocaleInput(code, name string) error {
+	code = strings.TrimSpace(code)
+	if len(code) < 2 || len(code) > 35 {
+		return fmt.Errorf("locale code must contain 2 to 35 characters")
+	}
+	for _, r := range code {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+			return fmt.Errorf("locale code may contain only letters, digits, and hyphens")
+		}
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("locale name is required")
 	}
 	return nil
 }
