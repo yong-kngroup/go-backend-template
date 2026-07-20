@@ -4,14 +4,21 @@ on:
   pull_request:
   push:
     branches:
-      - main
       - project/go-cms
+    tags:
+      - 'go-cms-v*'
 
 permissions:
   contents: read
 
+env:
+  REGISTRY: ccr.ccs.tencentyun.com
+  NAMESPACE: ${{ vars.CCR_NAMESPACE || 'pigpig' }}
+  IMAGE_NAME: ${{ vars.CCR_IMAGE_NAME || 'go-backend-template' }}
+
 jobs:
-  verify:
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -28,14 +35,56 @@ jobs:
       - name: Unit tests
         run: go test ./...
 
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Static analysis
         run: go vet ./...
+
+  build-executables:
+    name: Build Executables
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
       - name: Build executables
         run: go build -buildvcs=false ./cmd/server ./cmd/worker ./cmd/cron ./cmd/migrate ./cmd/mcp
 
-      - name: Build container images
-        run: make docker-build IMAGE_TAG=ci-${{ github.sha }}
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
       - name: Start integration dependencies
         run: docker compose -f deploy/docker-compose.yml up -d --wait --wait-timeout 120 postgres redis kafka minio
@@ -62,3 +111,67 @@ jobs:
       - name: Stop integration dependencies
         if: always()
         run: docker compose -f deploy/docker-compose.yml down -v --remove-orphans
+
+  build-images:
+    name: Build Container Images
+    needs: [unit-tests, static-analysis, build-executables, integration-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build container images
+        run: make docker-build IMAGE_TAG=ci-${{ github.sha }}
+
+  build-and-push:
+    name: Build & Push Images
+    needs: build-images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/go-cms-v')
+    environment: go-cms
+
+    strategy:
+      matrix:
+        app: [server, worker, cron]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release commit is on project/go-cms
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/project/go-cms
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}-${{ matrix.app }}
+          tags: |
+            type=ref,event=tag
+            type=sha,format=short,prefix=sha-
+            type=raw,value=go-cms
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Tencent CCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.CCR_USERNAME }}
+          password: ${{ secrets.CCR_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: APP=${{ matrix.app }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
