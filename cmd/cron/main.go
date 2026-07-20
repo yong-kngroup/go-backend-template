@@ -16,7 +16,7 @@ import (
 
 func main() {
 	var configPath string
-	flag.StringVar(&configPath, "config", "config.yaml", "Path to the configuration file")
+	flag.StringVar(&configPath, "config", "", "Path to the configuration file")
 	flag.Parse()
 
 	cfg, err := config.Load(configPath)

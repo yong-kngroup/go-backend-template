@@ -252,7 +252,7 @@ func Load(configPath string) (*Config, error) {
 
 	// load config file
 	if configPath == "" {
-		configPath = "config.yaml"
+		configPath = "configs/config.yaml"
 	}
 
 	// Configuration is supplied explicitly or resolved from the process working

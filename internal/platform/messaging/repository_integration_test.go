@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka"
+	"github.com/freeDog-wy/go-backend-template/internal/infra/kafka/consumer"
 	"github.com/freeDog-wy/go-backend-template/internal/testsupport"
 	"gorm.io/gorm"
 )
@@ -24,7 +24,7 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 		attemptedAt := time.Now().UTC().Truncate(time.Second)
 		lockedUntil := attemptedAt.Add(5 * time.Minute)
 
-		result, err := repo.Begin(context.Background(), kafka.ConsumptionBegin{
+		result, err := repo.Begin(context.Background(), consumer.ConsumptionBegin{
 			ConsumerGroup: consumerGroup,
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
@@ -35,16 +35,16 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Begin() error = %v", err)
 		}
-		if result.Decision != kafka.ConsumptionDecisionAcquired {
-			t.Fatalf("decision = %q, want %q", result.Decision, kafka.ConsumptionDecisionAcquired)
+		if result.Decision != consumer.ConsumptionDecisionAcquired {
+			t.Fatalf("decision = %q, want %q", result.Decision, consumer.ConsumptionDecisionAcquired)
 		}
 		if result.AttemptCount != 1 {
 			t.Fatalf("attempt count = %d, want 1", result.AttemptCount)
 		}
 
 		record := findConsumptionRecord(t, db, consumerGroup, messageKey)
-		if record.Status != string(kafka.ConsumptionStatusProcessing) {
-			t.Fatalf("status = %q, want %q", record.Status, kafka.ConsumptionStatusProcessing)
+		if record.Status != string(consumer.ConsumptionStatusProcessing) {
+			t.Fatalf("status = %q, want %q", record.Status, consumer.ConsumptionStatusProcessing)
 		}
 		if record.AttemptCount != 1 {
 			t.Fatalf("stored attempt count = %d, want 1", record.AttemptCount)
@@ -70,14 +70,14 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
 			TraceID:       "trace-1",
-			Status:        string(kafka.ConsumptionStatusProcessing),
+			Status:        string(consumer.ConsumptionStatusProcessing),
 			AttemptCount:  2,
 			LockedUntil:   timePtr(lockedUntil),
 			CreatedAt:     attemptedAt.Add(-10 * time.Minute),
 			UpdatedAt:     attemptedAt.Add(-1 * time.Minute),
 		})
 
-		result, err := repo.Begin(context.Background(), kafka.ConsumptionBegin{
+		result, err := repo.Begin(context.Background(), consumer.ConsumptionBegin{
 			ConsumerGroup: consumerGroup,
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
@@ -88,8 +88,8 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Begin() error = %v", err)
 		}
-		if result.Decision != kafka.ConsumptionDecisionLocked {
-			t.Fatalf("decision = %q, want %q", result.Decision, kafka.ConsumptionDecisionLocked)
+		if result.Decision != consumer.ConsumptionDecisionLocked {
+			t.Fatalf("decision = %q, want %q", result.Decision, consumer.ConsumptionDecisionLocked)
 		}
 		if result.AttemptCount != 2 {
 			t.Fatalf("attempt count = %d, want 2", result.AttemptCount)
@@ -113,7 +113,7 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 			MessageKey:    messageKey,
 			EventName:     "old.event",
 			TraceID:       "old-trace",
-			Status:        string(kafka.ConsumptionStatusFailed),
+			Status:        string(consumer.ConsumptionStatusFailed),
 			AttemptCount:  3,
 			LastError:     "boom",
 			LockedUntil:   timePtr(attemptedAt.Add(-1 * time.Minute)),
@@ -122,7 +122,7 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 			UpdatedAt:     attemptedAt.Add(-2 * time.Minute),
 		})
 
-		result, err := repo.Begin(context.Background(), kafka.ConsumptionBegin{
+		result, err := repo.Begin(context.Background(), consumer.ConsumptionBegin{
 			ConsumerGroup: consumerGroup,
 			MessageKey:    messageKey,
 			EventName:     "new.event",
@@ -133,16 +133,16 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Begin() error = %v", err)
 		}
-		if result.Decision != kafka.ConsumptionDecisionAcquired {
-			t.Fatalf("decision = %q, want %q", result.Decision, kafka.ConsumptionDecisionAcquired)
+		if result.Decision != consumer.ConsumptionDecisionAcquired {
+			t.Fatalf("decision = %q, want %q", result.Decision, consumer.ConsumptionDecisionAcquired)
 		}
 		if result.AttemptCount != 4 {
 			t.Fatalf("attempt count = %d, want 4", result.AttemptCount)
 		}
 
 		record := findConsumptionRecord(t, db, consumerGroup, messageKey)
-		if record.Status != string(kafka.ConsumptionStatusProcessing) {
-			t.Fatalf("status = %q, want %q", record.Status, kafka.ConsumptionStatusProcessing)
+		if record.Status != string(consumer.ConsumptionStatusProcessing) {
+			t.Fatalf("status = %q, want %q", record.Status, consumer.ConsumptionStatusProcessing)
 		}
 		if record.AttemptCount != 4 {
 			t.Fatalf("stored attempt count = %d, want 4", record.AttemptCount)
@@ -170,14 +170,14 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
 			TraceID:       "trace-1",
-			Status:        string(kafka.ConsumptionStatusDone),
+			Status:        string(consumer.ConsumptionStatusDone),
 			AttemptCount:  2,
 			ProcessedAt:   timePtr(attemptedAt.Add(-1 * time.Minute)),
 			CreatedAt:     attemptedAt.Add(-10 * time.Minute),
 			UpdatedAt:     attemptedAt.Add(-1 * time.Minute),
 		})
 
-		result, err := repo.Begin(context.Background(), kafka.ConsumptionBegin{
+		result, err := repo.Begin(context.Background(), consumer.ConsumptionBegin{
 			ConsumerGroup: consumerGroup,
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
@@ -188,8 +188,8 @@ func TestRepositoryIntegrationBegin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Begin() error = %v", err)
 		}
-		if result.Decision != kafka.ConsumptionDecisionDone {
-			t.Fatalf("decision = %q, want %q", result.Decision, kafka.ConsumptionDecisionDone)
+		if result.Decision != consumer.ConsumptionDecisionDone {
+			t.Fatalf("decision = %q, want %q", result.Decision, consumer.ConsumptionDecisionDone)
 		}
 		if result.AttemptCount != 2 {
 			t.Fatalf("attempt count = %d, want 2", result.AttemptCount)
@@ -210,7 +210,7 @@ func TestRepositoryIntegrationStatusUpdates(t *testing.T) {
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
 			TraceID:       "trace-1",
-			Status:        string(kafka.ConsumptionStatusProcessing),
+			Status:        string(consumer.ConsumptionStatusProcessing),
 			AttemptCount:  1,
 			LastError:     "boom",
 			LockedUntil:   timePtr(now.Add(5 * time.Minute)),
@@ -224,8 +224,8 @@ func TestRepositoryIntegrationStatusUpdates(t *testing.T) {
 		}
 
 		record := findConsumptionRecord(t, db, consumerGroup, messageKey)
-		if record.Status != string(kafka.ConsumptionStatusDone) {
-			t.Fatalf("status = %q, want %q", record.Status, kafka.ConsumptionStatusDone)
+		if record.Status != string(consumer.ConsumptionStatusDone) {
+			t.Fatalf("status = %q, want %q", record.Status, consumer.ConsumptionStatusDone)
 		}
 		if record.ProcessedAt == nil || !record.ProcessedAt.Equal(now) {
 			t.Fatalf("processed at = %v, want %v", record.ProcessedAt, now)
@@ -246,7 +246,7 @@ func TestRepositoryIntegrationStatusUpdates(t *testing.T) {
 			ConsumerGroup: consumerGroup,
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
-			Status:        string(kafka.ConsumptionStatusProcessing),
+			Status:        string(consumer.ConsumptionStatusProcessing),
 			AttemptCount:  2,
 			LockedUntil:   timePtr(now.Add(5 * time.Minute)),
 			CreatedAt:     now.Add(-10 * time.Minute),
@@ -259,8 +259,8 @@ func TestRepositoryIntegrationStatusUpdates(t *testing.T) {
 		}
 
 		record := findConsumptionRecord(t, db, consumerGroup, messageKey)
-		if record.Status != string(kafka.ConsumptionStatusFailed) {
-			t.Fatalf("status = %q, want %q", record.Status, kafka.ConsumptionStatusFailed)
+		if record.Status != string(consumer.ConsumptionStatusFailed) {
+			t.Fatalf("status = %q, want %q", record.Status, consumer.ConsumptionStatusFailed)
 		}
 		if record.LockedUntil != nil {
 			t.Fatalf("locked until = %v, want nil", record.LockedUntil)
@@ -278,7 +278,7 @@ func TestRepositoryIntegrationStatusUpdates(t *testing.T) {
 			ConsumerGroup: consumerGroup,
 			MessageKey:    messageKey,
 			EventName:     "user.registered",
-			Status:        string(kafka.ConsumptionStatusProcessing),
+			Status:        string(consumer.ConsumptionStatusProcessing),
 			AttemptCount:  3,
 			LockedUntil:   timePtr(now.Add(5 * time.Minute)),
 			CreatedAt:     now.Add(-10 * time.Minute),
@@ -291,8 +291,8 @@ func TestRepositoryIntegrationStatusUpdates(t *testing.T) {
 		}
 
 		record := findConsumptionRecord(t, db, consumerGroup, messageKey)
-		if record.Status != string(kafka.ConsumptionStatusDead) {
-			t.Fatalf("status = %q, want %q", record.Status, kafka.ConsumptionStatusDead)
+		if record.Status != string(consumer.ConsumptionStatusDead) {
+			t.Fatalf("status = %q, want %q", record.Status, consumer.ConsumptionStatusDead)
 		}
 		if record.LockedUntil != nil {
 			t.Fatalf("locked until = %v, want nil", record.LockedUntil)
@@ -307,7 +307,7 @@ func TestRepositoryIntegrationValidation(t *testing.T) {
 	db := openConsumptionTestDB(t)
 	repo := New(db)
 
-	_, err := repo.Begin(context.Background(), kafka.ConsumptionBegin{})
+	_, err := repo.Begin(context.Background(), consumer.ConsumptionBegin{})
 	if !errors.Is(err, errInvalidConsumptionRecord) {
 		t.Fatalf("Begin() error = %v, want %v", err, errInvalidConsumptionRecord)
 	}

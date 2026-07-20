@@ -21,7 +21,7 @@ func main() {
 	var allowDestructive bool
 	var showVersion bool
 
-	flag.StringVar(&configPath, "config", "config.yaml", "Path to the configuration file")
+	flag.StringVar(&configPath, "config", "", "Path to the configuration file")
 	flag.StringVar(&migrationDir, "migrations", "db/migrations", "Path to SQL migration files")
 	flag.StringVar(&direction, "direction", "up", "Migration direction: up or down")
 	flag.IntVar(&steps, "steps", 0, "Number of migrations to apply; 0 means all")
