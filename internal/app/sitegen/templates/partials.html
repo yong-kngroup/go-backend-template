@@ -1,0 +1,62 @@
+{{define "site-header"}}
+<header class="site-header">
+  <div class="site-shell header-inner">
+    <a class="site-brand" href="{{.CurrentLocale.URL}}">{{.SiteName}}</a>
+    <nav class="site-nav" aria-label="{{.Labels.Categories}}">
+      <a href="{{.CurrentLocale.URL}}">{{.Labels.Home}}</a>
+      <a href="{{.CurrentLocale.URL}}articles/">{{.Labels.Articles}}</a>
+      {{range .Navigation}}<a href="{{.URL}}">{{.Name}}</a>{{end}}
+    </nav>
+    <div class="header-tools">
+      <details class="language-menu">
+        <summary>{{.CurrentLocale.Name}}</summary>
+        <ul>
+          {{range .Locales}}<li>{{if .Current}}<span aria-current="page" lang="{{.Code}}">{{.Name}}</span>{{else}}<a href="{{.URL}}" lang="{{.Code}}">{{.Name}}</a>{{end}}</li>{{end}}
+        </ul>
+      </details>
+      <details class="mobile-navigation">
+        <summary aria-label="{{.Labels.Menu}}" title="{{.Labels.Menu}}"><i data-lucide="menu" aria-hidden="true"></i></summary>
+        <nav aria-label="{{.Labels.Menu}}">
+          <a href="{{.CurrentLocale.URL}}">{{.Labels.Home}}</a>
+          <a href="{{.CurrentLocale.URL}}articles/">{{.Labels.Articles}}</a>
+          {{range .Navigation}}<a href="{{.URL}}">{{.Name}}</a>{{end}}
+        </nav>
+      </details>
+      <button class="icon-button" type="button" data-theme-toggle data-label-dark="{{.Labels.ToggleDark}}" data-label-light="{{.Labels.ToggleLight}}" aria-label="{{.Labels.ToggleDark}}" title="{{.Labels.ToggleDark}}">
+        <i data-lucide="moon" aria-hidden="true"></i><span class="sr-only" data-theme-label>{{.Labels.ToggleDark}}</span>
+      </button>
+    </div>
+  </div>
+</header>
+{{end}}
+
+{{define "article-list"}}
+<div class="article-list">{{range .}}
+  <article class="article-card">
+    {{if hasCover .Cover}}<img class="article-card-cover" src="{{.Cover.URL}}" alt="{{.Cover.AltText}}" loading="lazy">{{end}}
+    <div class="article-card-content">
+      {{if .Category}}<a class="article-category" href="{{.Category.URL}}">{{.Category.Name}}</a>{{end}}
+      <h3><a href="{{.URL}}">{{.Title}}</a></h3>
+      {{if .Summary}}<p>{{.Summary}}</p>{{end}}
+      {{if .PublishedAt}}<time datetime="{{.PublishedAt.Format "2006-01-02"}}">{{formatDate .PublishedAt}}</time>{{end}}
+    </div>
+  </article>{{end}}
+</div>
+{{end}}
+
+{{define "pagination"}}
+{{if gt .Total 1}}<nav class="pagination" aria-label="Pagination">
+  {{if .Previous}}<a href="{{.Previous}}">{{.PreviousLabel}}</a>{{end}}
+  <span>{{.PageLabel}} {{.Current}} / {{.Total}}</span>
+  {{if .Next}}<a href="{{.Next}}">{{.NextLabel}}</a>{{end}}
+</nav>{{end}}
+{{end}}
+
+{{define "site-footer"}}
+<footer class="site-footer">
+  <div class="site-shell footer-inner">
+    <span>{{.SiteName}}</span>
+    <a href="/sitemap.xml">Sitemap</a>
+  </div>
+</footer>
+{{end}}

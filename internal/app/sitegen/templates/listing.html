@@ -1,0 +1,11 @@
+{{define "content"}}
+<section class="site-shell page-intro compact">
+  <p class="eyebrow">{{.CurrentLocale.Name}}</p>
+  <h1>{{.Heading}}</h1>
+  {{if .Description}}<p class="page-description">{{.Description}}</p>{{end}}
+</section>
+<section class="site-shell content-section">
+  {{template "article-list" .Articles}}
+  {{template "pagination" .Pagination}}
+</section>
+{{end}}

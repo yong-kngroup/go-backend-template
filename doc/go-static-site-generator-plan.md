@@ -111,6 +111,7 @@ internal/app/sitegen/
     tag.html
     404.html
   assets/
+    theme-init.js                 # 样式加载前恢复已保存的主题
     app.js
     site.css
 ```
@@ -222,7 +223,197 @@ go run ./cmd/sitegen \
 <script type="module" src="/assets/app.js"></script>
 ```
 
-`app.js` 第一版仅可实现主题偏好切换、移动端导航展开和其他非关键体验增强。它不得请求 CMS API、注入文章正文、承担页面路由或生成 SEO 信息。
+`app.js` 第一版实现主题偏好切换、移动端导航展开和其他非关键体验增强。它不得请求 CMS API、注入文章正文、承担页面路由或生成 SEO 信息。
+
+### 9.1 UI 设计规范
+
+#### 视觉方向
+
+站点定位为内容优先的多语言知识库，而不是管理后台、营销落地页或卡片式信息流。视觉应延续现有 `modern-js-lab` 的清洁、克制和易读基调：浅色画布、深色文字、小圆角和绿色交互强调；但不复用任务面板的密集卡片布局。
+
+- 首页和列表页以内容层级、留白和分隔线组织，页面区块不使用悬浮大卡片。
+- 文章页以连续阅读为核心，正文、目录、元数据和相关链接应有清楚的层级，不制造装饰性视觉元素。
+- 不使用渐变、发光圆形、背景插画、玻璃拟态或大面积深色背景。
+- CMS 文章封面是唯一的主要视觉媒体；有封面时展示实际图片，不以模糊、裁切过度或纯氛围图替代。
+
+#### 设计令牌
+
+`assets/site.css` 必须先定义下列 CSS 自定义属性，模板和脚本不得内联颜色、尺寸或阴影值。Pico CSS 仅作为 reset 和基础元素样式，以下令牌覆盖站点视觉。浅色主题是令牌默认值；深色主题仅覆盖颜色令牌，排版、间距、宽度和圆角不变。
+
+```css
+:root {
+  color-scheme: light;
+  --color-canvas: #f7f8f6;
+  --color-surface: #ffffff;
+  --color-ink: #1d2730;
+  --color-muted: #62707a;
+  --color-line: #d9e0e2;
+  --color-brand: #0f766e;
+  --color-brand-hover: #0b5f59;
+  --color-link: #155e9a;
+  --color-code-bg: #17212b;
+  --color-code-ink: #e8f0f2;
+  --color-notice-bg: #edf6f2;
+  --color-notice-line: #9fcfbe;
+  --font-ui: Inter, "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-reading: "Noto Serif CJK SC", "Songti SC", "STSong", Georgia, ui-serif, serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --shadow-subtle: 0 6px 20px rgb(29 39 48 / 0.06);
+  --content-max: 1200px;
+  --reading-max: 720px;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #11191e;
+  --color-surface: #19242a;
+  --color-ink: #e7eef0;
+  --color-muted: #afbec4;
+  --color-line: #394a52;
+  --color-brand: #54cbb4;
+  --color-brand-hover: #79dbc8;
+  --color-link: #82cbff;
+  --color-code-bg: #0c1318;
+  --color-code-ink: #e5edef;
+  --color-notice-bg: #17332d;
+  --color-notice-line: #4d9d89;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --color-canvas: #11191e;
+    --color-surface: #19242a;
+    --color-ink: #e7eef0;
+    --color-muted: #afbec4;
+    --color-line: #394a52;
+    --color-brand: #54cbb4;
+    --color-brand-hover: #79dbc8;
+    --color-link: #82cbff;
+    --color-code-bg: #0c1318;
+    --color-code-ink: #e5edef;
+    --color-notice-bg: #17332d;
+    --color-notice-line: #4d9d89;
+  }
+}
+```
+
+基础文字使用 `--font-ui`，文章正文使用 `--font-reading`。正文基准字号为 `18px`、行高 `1.8`；正文列最大宽度为 `720px`。标题使用固定字号阶梯，不得用视口单位缩放字体：`h1` 40px、`h2` 28px、`h3` 22px、`h4` 18px。移动端只将 `h1` 调整为 32px，正文仍保持 18px 以保障阅读性。深色主题不得使用纯黑背景或纯白正文，以减轻夜间阅读眩光；封面图片、正文图片和代码块不强制反相或滤镜处理。
+
+#### 页面框架
+
+每页使用相同的四段结构：
+
+```text
+Skip link
+Site header: 品牌 / 主导航 / 语言切换 / 主题切换
+Main: 当前页面的唯一主要内容
+Site footer: 版权、语言入口、Sitemap 链接
+```
+
+- 页面最大内容宽度为 `1200px`，桌面左右内边距 32px，移动端为 16px。
+- 顶部导航高度固定为 64px，使用 `--color-surface` 的不透明背景和 `--color-line` 底部分隔线；滚动后可使用轻微阴影，但不得遮挡正文。
+- 品牌名称为顶部左侧的首要识别元素，使用文字或现有正式 Logo；不要使用只有图标而没有可访问名称的品牌入口。
+- 桌面端显示主导航、当前语言和主题控制；移动端将导航收纳为可访问的展开区，初始状态和无 JavaScript 状态必须可用。
+- 所有页面在 `main` 前提供可见焦点的“跳至正文”链接。
+
+#### 明暗主题行为
+
+站点第一版必须同时提供浅色与深色主题。首次访问时，CSS 使用 `prefers-color-scheme` 匹配系统偏好；用户随后可以通过页头中固定尺寸的主题图标按钮在浅色和深色间切换。按钮使用 Lucide 的 `Sun` 和 `Moon` 图标，具有随状态变化的 `aria-label`，例如“切换至深色主题”。图标按钮的可点击区域不小于 40px，并配有 hover、focus-visible 和 active 状态。
+
+主题选择使用 `localStorage` 的 `site-theme` 键保存为 `light` 或 `dark`。页面加载时，初始化脚本必须在首次可见渲染前读取该键并设置 `html[data-theme]`；没有保存值时不设置属性，让 CSS 的系统偏好规则生效。`app.js` 使用相同规则响应按钮点击。主题切换只修改 `data-theme` 和按钮标签，不得重新请求 API、重新渲染文章或改变布局尺寸。
+
+为避免首次加载出现错误主题闪烁，`base.html` 在样式表之前加载本地的阻塞脚本 `assets/theme-init.js`：它只读取 `site-theme`，值为 `light` 或 `dark` 时设置 `document.documentElement.dataset.theme`，不包含其他业务逻辑。该方案不需要为静态 HTML 维护 CSP nonce；若 JavaScript 不可用，CSS 的 `prefers-color-scheme` 仍能提供适合系统的主题。
+
+主题切换应只对 `background-color`、`color`、`border-color` 和阴影使用不超过 150ms 的过渡；用户设置 `prefers-reduced-motion: reduce` 时禁用过渡。深色主题必须保持与浅色主题一致的正文宽度、行高、标题尺寸、图片比例、代码滚动行为和目录位置，确保用户切换主题时文章阅读位置不发生跳动。
+
+#### 页面布局
+
+| 页面 | 必须包含 | 布局规则 |
+| --- | --- | --- |
+| 首页 | 站点名称、简短说明、顶级分类、最新文章 | 顶部是无卡片的内容介绍区；分类为最多三列的轻量链接网格，文章使用纵向列表，首屏应看到部分最新文章。 |
+| 语言首页 | 当前语言名称、分类导航、最新文章 | 与首页相同结构，但所有文案和链接属于当前 locale。 |
+| 文章列表 | 标题、文章数量、文章卡片、分页 | 单列列表；每项展示分类、标题、摘要、发布时间和可选缩略封面。 |
+| 文章详情 | 面包屑、标题、摘要、元数据、可选封面、正文、目录、语言链接 | 桌面端采用 `minmax(0, 720px) 200px` 两列，正文在左、目录在右；目录可 sticky。小屏幕将目录移动到正文前。 |
+| 分类页 | 分类名称、描述、子分类、文章列表、分页 | 子分类为普通链接列表，不包裹在嵌套卡片中；文章列表复用同一组件。 |
+| 标签页 | 标签名称、文章列表、分页 | 与分类文章列表一致，不额外制造装饰区。 |
+| 404 | 简短错误说明、返回首页链接、分类入口 | 不使用插画或营销式文案。 |
+
+“文章卡片”是唯一允许的重复内容卡片：使用 `--color-surface` 背景和 `--color-line` 的 1px 边框、最多 8px 圆角、内边距 20px。它可在悬停时变更边框和阴影，但高度、封面比例、标题行距和元数据区域必须稳定，不能因内容变化跳动。文章卡片不得嵌套在其他卡片内。
+
+#### 文章语言切换
+
+多语言是文章页的必备能力。每篇文章详情页必须根据详情接口的 `available_locales` 渲染语言切换器，并用构建开始时读取的 locale 列表将 locale code 映射为本地化显示名称。
+
+- 只展示 `available_locales` 中的已发布翻译，禁止为未翻译语言生成禁用项、占位链接或自动回退内容。
+- 每个选项的链接由该条记录的 `locale` 和 `slug` 共同生成，例如英文翻译链接到 `/{locale}/articles/{translated-slug}/`；不得假定所有翻译共用 slug。
+- 当前语言显示为当前项，添加 `aria-current="page"`，且不生成指向自身的链接；其他选项使用 `<a hreflang="..." lang="...">`。
+- 有两种及以上已发布翻译时，在文章标题与元数据区域中提供语言菜单；只有一种翻译时不显示空的语言切换控件。
+- 控件使用原生 `<details>` 和 `<summary>` 实现可展开菜单，`summary` 显示当前语言名称并具有清晰的“选择文章语言”无障碍名称。这样即使 JavaScript 不可用，用户仍能展开并跳转。
+- 语言切换只导航到另一个已生成的静态页面，不通过浏览器 API 请求翻译内容；切换后不尝试复制当前阅读进度或正文锚点，因为不同语言的内容结构可能不同。
+
+建议的静态 HTML 结构：
+
+```html
+<nav class="article-language-switcher" aria-label="选择文章语言">
+  <details>
+    <summary>简体中文</summary>
+    <ul>
+      <li><span aria-current="page" lang="zh-CN">简体中文</span></li>
+      <li><a href="/en-US/articles/go-cms-design/" hreflang="en-US" lang="en-US">English</a></li>
+    </ul>
+  </details>
+</nav>
+```
+
+站点页头的全局语言入口与文章切换器职责不同：全局入口用于前往其他语言首页；进入文章详情后，文章切换器才负责跳转到该文章存在的翻译版本。两者不得混用，避免用户被带到不存在的翻译 URL。
+
+#### 文章排版与 Markdown 映射
+
+`markdown.go` 的输出和 `site.css` 必须满足以下对应关系：
+
+| Markdown 元素 | HTML/CSS 规则 |
+| --- | --- |
+| `h2` - `h4` | 标题前留出 48px，具有稳定 `id` 供目录链接；标题不使用负字距。 |
+| 段落 | 段间距 20px，禁止首行缩进，长英文 URL 必须自动换行。 |
+| 链接 | 使用 `--color-link` 和明显的下划线；仅颜色变化不能是唯一状态提示。 |
+| 引用 | 左侧 3px `--color-brand` 边线、`--color-notice-bg` 背景；不是圆角大卡片。 |
+| 无序/有序列表 | 保留列表标记，使用足够的缩进和项间距。 |
+| 表格 | 外层允许横向滚动；表头使用浅色背景，单元格有分隔线。 |
+| 代码块 | 深色背景、浅色文字、16px 内边距、4px 圆角、可横向滚动。 |
+| 行内代码 | 使用主题适配的弱化背景和等宽字体，不与链接样式混淆。 |
+| 图片 | 最大宽度 100%，保留原始纵横比；使用 Markdown alt 文本作为 `alt`。 |
+
+文章详情页标题下依次展示发布时间、更新时间、主分类和预计阅读时长。阅读时长按净化后的正文纯文本计算，采用每分钟 400 个中文字符或 200 个英文单词的较大值，并向上取整；该信息是辅助阅读信息，不能替代发布日期。
+
+#### 响应式与交互状态
+
+布局断点固定为 768px 与 1024px：
+
+- 小于 768px：单列，导航折叠，文章目录置于正文前，封面占满内容宽度。
+- 768px 至 1023px：列表可为两列，文章页仍单列，保留 24px 页面内边距。
+- 1024px 及以上：首页分类最多三列，文章详情启用正文和目录双列布局。
+
+交互仅用于增强。链接、按钮、输入控件必须有 default、hover、focus-visible、active 和 disabled 状态；键盘焦点使用不少于 3px 的高对比轮廓。主题切换保存到 `localStorage`，没有用户选择时遵循 `prefers-color-scheme`。
+
+#### 无障碍与 UI 验收
+
+- 常规文本与背景对比度至少为 4.5:1，大号文字和交互边界至少为 3:1。
+- 图像使用 CMS 返回的本地化 alt 文本；装饰图使用空 alt。
+- 导航、语言切换、目录和分页具有明确的 `aria-label`、当前项状态及键盘访问路径。
+- 每个页面只有一个 `h1`，标题层级连续；标题、链接和按钮的可点击区域不小于 40px。
+- 在 320px、768px、1440px 三种宽度下验证文字不溢出、控件不重叠、文章正文可阅读。
+- 在浅色、深色和系统自动三种主题来源下验证正文、链接、代码块、引用、表格、导航和焦点轮廓的对比度及可读性；主题切换前后正文滚动位置和页面布局不变化。
+- 对一篇具有不同 slug 的多语言文章验证：只显示已发布翻译、当前语言不可点击、所有翻译链接均指向已生成页面；对于只有一种翻译的文章不渲染语言菜单。
+- 使用浏览器 Lighthouse 检查 Accessibility、SEO 和 Best Practices；视觉实现以生成后的实际页面截图为准，而不是仅检查模板源代码。
 
 ## 10. SEO 规则
 

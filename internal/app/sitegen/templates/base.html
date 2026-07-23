@@ -1,0 +1,28 @@
+{{define "base"}}
+<!doctype html>
+<html lang="{{.CurrentLocale.Code}}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{.Head.Description}}">
+    <title>{{.Head.Title}}</title>
+    <link rel="canonical" href="{{.Head.Canonical}}">
+    {{range .Head.Hreflangs}}<link rel="alternate" hreflang="{{if .Default}}x-default{{else}}{{.Locale}}{{end}}" href="{{.URL}}">
+    {{end}}{{if .Head.Image}}<meta property="og:image" content="{{.Head.Image}}">{{end}}
+    <meta property="og:title" content="{{.Head.Title}}">
+    <meta property="og:description" content="{{.Head.Description}}">
+    <meta property="og:url" content="{{.Head.Canonical}}">
+    <script src="/assets/theme-init.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
+    <link rel="stylesheet" href="/assets/site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">{{.Labels.SkipToContent}}</a>
+    {{template "site-header" .}}
+    <main id="main-content">{{template "content" .}}</main>
+    {{template "site-footer" .}}
+    <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
+{{end}}

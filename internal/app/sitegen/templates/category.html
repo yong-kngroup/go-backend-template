@@ -1,0 +1,15 @@
+{{define "content"}}
+<section class="site-shell page-intro compact">
+  <p class="eyebrow">{{.CurrentLocale.Name}}</p>
+  <h1>{{.Heading}}</h1>
+  {{if .Description}}<p class="page-description">{{.Description}}</p>{{end}}
+</section>
+{{if .Children}}<section class="site-shell content-section" aria-labelledby="subcategories-heading">
+  <h2 id="subcategories-heading">{{.Labels.Categories}}</h2>
+  <div class="category-grid">{{range .Children}}<a class="category-link" href="{{.URL}}">{{.Name}}</a>{{end}}</div>
+</section>{{end}}
+<section class="site-shell content-section">
+  {{template "article-list" .Articles}}
+  {{template "pagination" .Pagination}}
+</section>
+{{end}}

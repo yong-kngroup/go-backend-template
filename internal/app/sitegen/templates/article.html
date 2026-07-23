@@ -1,0 +1,20 @@
+{{define "content"}}
+<article class="site-shell article-page">
+  <header class="article-header">
+    {{if .Article.Breadcrumbs}}<nav class="breadcrumbs" aria-label="Breadcrumb">{{range .Article.Breadcrumbs}}<a href="{{$.CurrentLocale.URL}}categories/{{.Slug}}/">{{.Name}}</a>{{end}}</nav>{{end}}
+    <h1>{{.Article.Title}}</h1>
+    {{if .Article.Summary}}<p class="article-summary">{{.Article.Summary}}</p>{{end}}
+    <div class="article-meta">
+      {{if .Article.PublishedAt}}<time datetime="{{.Article.PublishedAt.Format "2006-01-02"}}">{{.Labels.Published}} {{formatDate .Article.PublishedAt}}</time>{{end}}
+      <time datetime="{{.Article.UpdatedAt.Format "2006-01-02"}}">{{.Labels.Updated}} {{formatUpdated .Article.UpdatedAt}}</time>
+      <span>{{.Labels.ReadingTime}} {{.ReadingMinutes}} {{.Labels.Minutes}}</span>
+    </div>
+    {{if .ShowLanguageMenu}}<nav class="article-language-switcher" aria-label="{{.Labels.SelectLanguage}}"><details><summary>{{.CurrentLocale.Name}}</summary><ul>{{range .Languages}}<li>{{if .Current}}<span aria-current="page" lang="{{.Code}}">{{.Name}}</span>{{else}}<a href="{{.URL}}" hreflang="{{.Code}}" lang="{{.Code}}">{{.Name}}</a>{{end}}</li>{{end}}</ul></details></nav>{{end}}
+  </header>
+  {{if hasCover .Article.Cover}}<img class="article-cover" src="{{.Article.Cover.URL}}" alt="{{.Article.Cover.AltText}}">{{end}}
+  <div class="article-layout">
+    <div class="article-body">{{.Body}}</div>
+    {{if .TOC}}<aside class="article-toc"><strong>{{.Labels.TableOfContents}}</strong><ol>{{range .TOC}}<li class="toc-level-{{.Level}}"><a href="#{{.ID}}">{{.Text}}</a></li>{{end}}</ol></aside>{{end}}
+  </div>
+</article>
+{{end}}
